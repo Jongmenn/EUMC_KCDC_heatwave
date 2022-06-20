@@ -137,18 +137,18 @@ wh_s15$date2=with(wh_s15,ifelse(dateT<=9,date-1,as.Date(date)));wh_s15$date2=as.
 wh_s16$date2=with(wh_s16,ifelse(dateT<=9,date-1,as.Date(date)));wh_s16$date2=as.Date(wh_s16$date2)
 wh_s17$date2=with(wh_s17,ifelse(dateT<=9,date-1,as.Date(date)));wh_s17$date2=as.Date(wh_s17$date2)
 
+View(subset(wh_s01,date2>="2018-07-15"))
+
 #열대야, 일별 기온 편차 
 sido_tn_sd<-function(data,area){
   r1<-data %>% filter(TF==1) %>% group_by(date2) %>% 
-    dplyr:: summarise(TN_cnt=sum(TN),
-                      TN    =ifelse(TN_cnt>=1,1,0),
-                      TN_len=length(date2)) %>% mutate(area=area) %>% 
+    dplyr:: summarise(TN    =ifelse(sum(TN)>=16,1,0)) %>% mutate(area=area) %>% 
     filter(date2>="2001-01-01")
   
   #일별 기온 표준편차 
   r2<-data %>% group_by(date) %>% dplyr::summarise(temp_SD=sd(temp))
   
-  cbind(r1,temp_SD=r2$temp_SD) %>% dplyr::select(area,date2,TN_cnt:TN_len,temp_SD)
+  cbind(r1,temp_SD=r2$temp_SD) %>% dplyr::select(area,date2,TN,temp_SD)
   
 }
 tn_sd_s01<-sido_tn_sd(wh_s01,"서울")
@@ -170,10 +170,10 @@ tn_sd_s16<-sido_tn_sd(wh_s16,"경남")
 tn_sd_s17<-sido_tn_sd(wh_s17,"제주")
 
 tn_sd<-rbind(tn_sd_s01,tn_sd_s02,tn_sd_s03,tn_sd_s04,
-      tn_sd_s05,tn_sd_s06,tn_sd_s07,tn_sd_s08,
-      tn_sd_s09,tn_sd_s10,tn_sd_s11,tn_sd_s12,
-      tn_sd_s13,tn_sd_s14,tn_sd_s15,tn_sd_s16,tn_sd_s17)
+             tn_sd_s05,tn_sd_s06,tn_sd_s07,tn_sd_s08,
+             tn_sd_s09,tn_sd_s10,tn_sd_s11,tn_sd_s12,
+             tn_sd_s13,tn_sd_s14,tn_sd_s15,tn_sd_s16,tn_sd_s17)
 
 #기상청 시간 자료 이용, 시도별 일별 열대야, 일별 기온 편차 자료
 setwd("D:\\EUMC\\데이터관리\\기상청")
-write.csv(tn_sd,file="sido_tropical_night_dailyT_SD.csv",row.names=F,na="")
+write.csv(tn_sd,file="sido_tropical_night_dailyT_SD.csv",row.names=F,na="",fileEncoding = "euc-kr")
