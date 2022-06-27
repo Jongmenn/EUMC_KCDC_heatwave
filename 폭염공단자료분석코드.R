@@ -1,1402 +1,926 @@
-#-------------------------------------------------------------------------#
-#Æø¿° Áúº´Ã» °ø´ÜÀÚ·á 
-#-------------------------------------------------------------------------#
-#library
-pacman::p_load("dplyr","ggplot2","reshape2","sqldf","RColorBrewer","lubridate","lmtest","readxl","survival",
-               "splines","data.table","stringr","tidyr","extrafont","scales","gridExtra","Epi","tsModel",
-               "mgcv","gamm4","metafor","dlnm","survival","splines")
-
-#-------------------------------------------------------------------------#
-setwd("D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á")
-child_ts<-read.csv("child_ts.csv")
-child_ts$ddate=as.Date(child_ts$ddate)
-
-#dataset n; 1826*17=31,042, 2015-01-01~2019-12-31±îÁö ±â°£*17°³ µµ½Ã
-
-
-child_ts %>% group_by(year,month) %>% summarise(meanT=mean(meantemp_lag0,na.rm=T),
-                                                maxT=mean(maxtemp_lag0,na.rm=T)) %>% View
-
-#--------------------------------------------------------------------------#
-#--------------------------------------------------------------------------#
-#³ëÃâ ÀÚ·á
-temp_outcome<-read_excel("D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\heattable.xlsx",sheet=1)
-
-to<-melt(temp_outcome %>% select(-c(note)),id.vars=c("category","month"))
-to$month=ifelse(as.numeric(gsub("¿ù","",to$month))<10,paste0(0,as.numeric(gsub("¿ù","",to$month))),
-                as.numeric(gsub("¿ù","",to$month)))
-to$yymm=ymd(paste0(substr(to$variable,2,5),"-",to$month,"-",01))
-
-unique(to$category)
-
-to01<-to %>% filter(category %in% c("birth"))
-to02<-to %>% filter(category %in% c("ptb"))
-to03<-to %>% filter(category %in% c("lbw"))
-to04<-to %>% filter(category %in% c("heatrelated"))
-to05<-to %>% filter(category %in% c("feb"))
-to06<-to %>% filter(category %in% c("hfmd"))
-to07<-to %>% filter(category %in% c("atopic"))
-to08<-to %>% filter(category %in% c("om"))
-to19<-to %>% filter(category %in% c("kawa"))
-to10<-to %>% filter(category %in% c("intestinal"))
-to11<-to %>% filter(category %in% c("camp"))
-to12<-to %>% filter(category %in% c("respiratory"))
-to13<-to %>% filter(category %in% c("pneumonia"))
-to14<-to %>% filter(category %in% c("asthma"))
-to15<-to %>% filter(category %in% c("URI"))
-to16<-to %>% filter(category %in% c("ALRI"))
-to17<-to %>% filter(category %in% c("bronch1"))
-to18<-to %>% filter(category %in% c("bronch2"))
-
-
-exp <-to %>% filter(category %in% c("meanT","maxT"))
-exp$gubun=rep(c("Æò±Õ±â¿Â(¡ÆC)","ÃÖ°í±â¿Â(¡ÆC)"),each=12)
-exp$gubun=factor(exp$gubun,levels=unique(exp$gubun))
-
-library(scales)
-gexp<-ggplot(exp,aes(yymm,value,col=gubun))+geom_point(size=5)+geom_line(size=2)+labs(x="",y="±â¿Â(¡ÆC)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
-        legend.title = element_blank(),legend.position = "top")+
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")+
-  scale_color_manual(values=c("orange","red"))
-
-g1<-ggplot(to01,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="Ãâ»ı¾Æ °Ç¼ö(¸í)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g2<-ggplot(to02,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="Á¶»ê¾Æ °Ç¼ö(¸í)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g3<-ggplot(to03,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="ÀúÃ¼Áß¾Æ °Ç¼ö(¸í)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g4<-ggplot(to04,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="¿Â¿­ÁúÈ¯°ü·Ã ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g5<-ggplot(to05,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="¿­¼º°æ·Ã ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g6<-ggplot(to06,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="¼öÁ·±¸º´ ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g7<-ggplot(to07,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="¾ÆÅäÇÇÇÇºÎ¿° ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g8<-ggplot(to08,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="ÁßÀÌ¿° ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g9<-ggplot(to09,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="°¡¿Í»çÅ°º´ ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g10<-ggplot(to10,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="ÀüÃ¼ Àå°¨¿° ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g11<-ggplot(to11,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="Ä¯ÇÊ·Î¹ÚÅÍ Àå°¨¿° ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g12<-ggplot(to12,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="ÀüÃ¼ È£Èí±â ÁúÈ¯ ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g13<-ggplot(to13,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="Æó·Å ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g14<-ggplot(to14,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="Ãµ½Ä ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g15<-ggplot(to15,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="»ó±âµµ °¨¿° ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g16<-ggplot(to16,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="±Ş¼ºÇÏ±âµµ °¨¿° ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g17<-ggplot(to17,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="±â°üÁö¿° ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-g18<-ggplot(to18,aes(yymm,value))+geom_point(size=5)+geom_line(size=2)+labs(x="³â¿ù",y="±Ş¼º¼¼±â°üÁö¿° ÀÔ¿ø¹ß»ı°Ç¼ö(°Ç)")+
-  theme_bw(base_size=25)+scale_y_continuous(labels = scales::comma)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_x_date(breaks = date_breaks("1 months"),date_labels = "%Y %m")
-
-x11();grid.arrange(gexp,g1,ncol=1)
-x11();grid.arrange(gexp,g2,ncol=1)
-x11();grid.arrange(gexp,g3,ncol=1)
-x11();grid.arrange(gexp,g4,ncol=1)
-x11();grid.arrange(gexp,g5,ncol=1)
-x11();grid.arrange(gexp,g6,ncol=1)
-x11();grid.arrange(gexp,g7,ncol=1)
-x11();grid.arrange(gexp,g8,ncol=1)
-x11();grid.arrange(gexp,g9,ncol=1)
-x11();grid.arrange(gexp,g10,ncol=1)
-x11();grid.arrange(gexp,g11,ncol=1)
-x11();grid.arrange(gexp,g12,ncol=1)
-x11();grid.arrange(gexp,g13,ncol=1)
-x11();grid.arrange(gexp,g14,ncol=1)
-x11();grid.arrange(gexp,g15,ncol=1)
-x11();grid.arrange(gexp,g16,ncol=1)
-x11();grid.arrange(gexp,g17,ncol=1)
-x11();grid.arrange(gexp,g18,ncol=1)
-#--------------------------------------------------------------------------#
-#--------------------------------------------------------------------------#
-
-
-#ÁúÈ¯ ÀÌ¸§ 
-names(child_ts)[grep("TOT",names(child_ts))]
-names(d01)
-
-d01<-child_ts %>% dplyr::select(heatrelated_CHILD_TOT,ddate:pm25_lag07) 
-d02<-child_ts %>% dplyr::select(VOL_CHILD_TOT,ddate:pm25_lag07)           
-d03<-child_ts %>% dplyr::select(feb_CHILD_TOT,ddate:pm25_lag07)
-d04<-child_ts %>% dplyr::select(HFMD_CHILD_TOT,ddate:pm25_lag07)
-d05<-child_ts %>% dplyr::select(RES_CHILD_TOT,ddate:pm25_lag07)
-d06<-child_ts %>% dplyr::select(acute_bronch1_CHILD_TOT,ddate:pm25_lag07)
-d07<-child_ts %>% dplyr::select(acute_bronch2_CHILD_TOT,ddate:pm25_lag07)
-d08<-child_ts %>% dplyr::select(URI_CHILD_TOT,ddate:pm25_lag07)
-d09<-child_ts %>% dplyr::select(ALRI_CHILD_TOT,ddate:pm25_lag07)
-d10<-child_ts %>% dplyr::select(asthma_CHILD_TOT,ddate:pm25_lag07)
-d11<-child_ts %>% dplyr::select(pne_CHILD_TOT,ddate:pm25_lag07)
-d12<-child_ts %>% dplyr::select(ATOPIC_CHILD_TOT,ddate:pm25_lag07)
-d13<-child_ts %>% dplyr::select(RSV_CHILD_TOT,ddate:pm25_lag07)
-d14<-child_ts %>% dplyr::select(CARDI_CHILD_TOT,ddate:pm25_lag07)
-d15<-child_ts %>% dplyr::select(KAWA_CHILD_TOT,ddate:pm25_lag07)
-d16<-child_ts %>% dplyr::select(mumps_CHILD_TOT,ddate:pm25_lag07)
-d17<-child_ts %>% dplyr::select(om_CHILD_TOT,ddate:pm25_lag07)
-d18<-child_ts %>% dplyr::select(intest_CHILD_TOT,ddate:pm25_lag07)
-d19<-child_ts %>% dplyr::select(rota_CHILD_TOT,ddate:pm25_lag07)
-d20<-child_ts %>% dplyr::select(camp_CHILD_TOT,ddate:pm25_lag07)
-
-#--------------------------------------------------------------------------#
-#--------------------------------------------------------------------------#
-#ÀüÃ¼ ÀÏ°ıÀûÀ¸·Î GAMMÀ¸·Î ÃßÁ¤ÇÏ±â 
-d01 %>% dplyr:: group_by(area) %>% summarise(mean=mean(heatrelated_CHILD_TOT),var=var(heatrelated_CHILD_TOT))
-
-d01 %>% dplyr::  group_by(ddate) %>% summarise(meanT=mean(meantemp_lag0,na.rm=T),
-                                               maxT =mean(maxtemp_lag0,na.rm=T),
-                                               pm25=mean(pm25_lag0,na.rm=T),
-                                               meanhumi=mean(meanhumi_lag0,na.rm=T),
-                                               ap=mean(meanpress1_lag0,na.rm=T),
-                                               windspeed=mean(windspeed_lag0,na.rm=T),
-                                               dewtemp=mean(dewtemp_lag0),na.rm=T) %>% dplyr::select(meanT:dewtemp) %>% 
-  cor(method="spearman",use="complete.obs")
-
-#--------------------------------------------------------------------------#
-#--------------------------------------------------------------------------#
-#Exposure-repsonse curve, GAMM
-
-tt.f<-function(dataset){
-  #dataset
-  #°áÃø Á¦°Å, ¼¼Á¾, Á¦ÁÖ Á¦¿Ü, 6~8¿ù¸¸
-  tt<-dataset[complete.cases(dataset),] %>% filter(!area %in% c("¼¼Á¾","Á¦ÁÖ")) %>% filter(month %in% c(6:8))
-  tt$outcome=tt[,1]
-  tt$area=factor(tt$area)
-  tt}
-
-#GAMM¿¡ Àû¿ëÇÏ·Á´Â ÇüÅÂ·Î dataset º¯°æ
-tt01<-tt.f(d01);tt02<-tt.f(d02);tt03<-tt.f(d03);tt04<-tt.f(d04);tt05<-tt.f(d05);
-tt06<-tt.f(d06);tt07<-tt.f(d07);tt08<-tt.f(d08);tt09<-tt.f(d09);tt10<-tt.f(d10);
-tt11<-tt.f(d11);tt12<-tt.f(d12);tt13<-tt.f(d13);tt14<-tt.f(d14);tt15<-tt.f(d15);
-tt16<-tt.f(d16);tt17<-tt.f(d17);tt18<-tt.f(d18);tt19<-tt.f(d19);tt20<-tt.f(d20)
-
-#--------------------------------------------------------------------------#
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; ¿Â¿­ÁúÈ¯ °ü·Ã
-tt01.fig=NULL
-tt01.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; ¿Â¿­ÁúÈ¯ °ü·Ã
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\¿Â¿­ÁúÈ¯(heatrelated).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt01.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt01.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt01.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt01.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt01.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt01.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt01.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt01.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-0.3,0.3));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; ¿­¼º°æ·Ã
-tt03.fig=NULL
-tt03.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt03,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt03.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt03,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt03.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt03,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt03.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt03,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt03.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt03,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt03.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt03,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt03.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt03,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt03.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt03,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; ¿­¼º°æ·Ã
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\¿­¼º°æ·Ã(feb).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt03.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt03.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt03.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt03.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt03.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt03.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt03.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt03.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-0.3,0.3));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; ¼öÁ·±¸º´
-tt04.fig=NULL
-tt04.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt04,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt04.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt04,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt04.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt04,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt04.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt04,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt04.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt04,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt04.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt04,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt04.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt04,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt04.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt04,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; ¼öÁ·±¸º´
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\¼öÁ·±¸º´(HFMD).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt04.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt04.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt04.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt04.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt04.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt04.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt04.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt04.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-1.0,1.0));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; ÀüÃ¼È£Èí±â(Respiratory)
-tt05.fig=NULL
-tt05.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt05,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt05.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt05,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt05.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt05,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt05.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt05,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt05.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt05,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt05.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt05,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt05.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt05,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt05.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt05,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; ÀüÃ¼È£Èí±â(Respiratory)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\ÀüÃ¼È£Èí±â(Respiratory).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt05.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt05.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt05.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt05.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt05.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt05.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt05.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt05.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-0.5,0.5));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; ±Ş¼º±â°üÁö¿°(acute_bronch1)
-tt06.fig=NULL
-tt06.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt06,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt06.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt06,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt06.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt06,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt06.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt06,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt06.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt06,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt06.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt06,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt06.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt06,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt06.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt06,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; ÀüÃ¼È£Èí±â(Respiratory)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\±Ş¼º±â°üÁö¿°(acute_bronch1).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt06.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt06.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt06.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt06.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt06.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt06.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt06.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt06.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-0.5,0.5));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; ±Ş¼º¼¼±â°üÁö¿°(acute_bronch2)
-tt07.fig=NULL
-tt07.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt07,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt07.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt07,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt07.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt07,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt07.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt07,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt07.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt07,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt07.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt07,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt07.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt07,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt07.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt07,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; ÀüÃ¼È£Èí±â(Respiratory)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\±Ş¼º¼¼±â°üÁö¿°(acute_bronch2).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt07.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt07.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt07.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt07.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt07.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt07.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt07.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt07.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-0.5,0.5));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; »ó±âµµ°¨¿°(URI)
-tt08.fig=NULL
-tt08.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt08,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt08.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt08,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt08.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt08,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt08.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt08,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt08.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt08,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt08.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt08,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt08.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt08,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt08.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt08,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; »ó±âµµ°¨¿°(URI)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\»ó±âµµ°¨¿°(URI).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt08.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt08.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt08.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt08.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt08.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt08.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt08.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-0.3,0.3));abline(h=0,col="red")
-plot(tt08.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-0.3,0.3));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; ÇÏ±âµµ°¨¿°(ALRI)
-tt09.fig=NULL
-tt09.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt09,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt09.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt09,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt09.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt09,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt09.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt09,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt09.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt09,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt09.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt09,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt09.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt09,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt09.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt09,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; ÇÏ±âµµ°¨¿°(ALRI)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\ÇÏ±âµµ°¨¿°(ALRI).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt09.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt09.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt09.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt09.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt09.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt09.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt09.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt09.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-0.5,0.5));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; Ãµ½Ä(asthma)
-tt10.fig=NULL
-tt10.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt10,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt10.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt10,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt10.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt10,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt10.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt10,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt10.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt10,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt10.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt10,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt10.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt10,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt10.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt10,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; Ãµ½Ä(asthma)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\Ãµ½Ä(asthma).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt10.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt10.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt10.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt10.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt10.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt10.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt10.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt10.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-0.5,0.5));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; Æó·Å(pneumonia)
-#Æó·Å ¹º°¡ Àß ¾Èµ¹¾Æ°¨, niterPQL ¼öÁ¤ÇÒ ÇÊ¿ä°¡ ÀÖÀ½, ¼ö·ÅÀ» ¾ÈÇÔ 
-tt11.fig=NULL
-
-table(tt11$outcome)
-tt11.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5,fx=T)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt11,family="quasipoisson",niterPQL=50,control=lmeControl(opt="optim",msMaxIter=11000))
-tt11.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5,fx=T)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt11,family="quasipoisson",niterPQL=50,control=lmeControl(opt="optim",msMaxIter=11000))
-tt11.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5,fx=T)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt11,family="quasipoisson",niterPQL=50,control=lmeControl(opt="optim",msMaxIter=11000))
-tt11.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5,fx=T)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt11,family="quasipoisson",niterPQL=50,control=lmeControl(opt="optim",msMaxIter=11000))
-tt11.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5,fx=T)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt11,family="quasipoisson",niterPQL=50,control=lmeControl(opt="optim",msMaxIter=20000))
-tt11.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5,fx=T)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt11,family="quasipoisson",niterPQL=50,control=lmeControl(opt="optim",msMaxIter=11000))
-tt11.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5,fx=T)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt11,family="quasipoisson",niterPQL=50,control=lmeControl(opt="optim",msMaxIter=11000))
-tt11.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5,fx=T)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt11,family="quasipoisson",niterPQL=50,control=lmeControl(opt="optim",msMaxIter=11000))
-
-tt11.fig$er4$gam
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; Æó·Å(pneumonia)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\Æó·Å(pneumonia).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt11.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt11.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt11.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt11.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt11.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt11.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt11.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt11.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-1.0,1.0));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; ¾ÆÅäÇÇ(atopic)
-#Æó·Å ¹º°¡ Àß ¾Èµ¹¾Æ°¨, niterPQL ¼öÁ¤ÇÒ ÇÊ¿ä°¡ ÀÖÀ½, ¼ö·ÅÀ» ¾ÈÇÔ 
-tt12.fig=NULL
-tt12.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt12,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=11000))
-tt12.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt12,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=11000))
-tt12.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt12,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=11000))
-tt12.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt12,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=11000))
-tt12.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt12,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=11000))
-tt12.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt12,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=11000))
-tt12.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt12,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=11000))
-tt12.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt12,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=11000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; ¾ÆÅäÇÇ(atopic)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\¾ÆÅäÇÇ(atopic).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt12.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt12.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt12.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt12.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt12.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt12.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt12.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt12.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-0.5,0.5));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; °¡¿Í»çÅ°(Kawasaki)
-tt15.fig=NULL
-tt15.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt15,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt15.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt15,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt15.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt15,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt15.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt15,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt15.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt15,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt15.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt15,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt15.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt15,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt15.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt15,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; °¡¿Í»çÅ°(Kawasaki)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\°¡¿Í»çÅ°(Kawasaki).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt15.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt15.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt15.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt15.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt15.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt15.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt15.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt15.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-0.5,0.5));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; º¼°Å¸®(Mumps)
-tt16.fig=NULL
-tt16.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt16,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt16.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt16,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt16.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt16,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt16.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt16,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt16.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt16,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt16.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt16,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt16.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt16,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-tt16.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt16,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=15000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; º¼°Å¸®(Mumps)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\º¼°Å¸®(Mumps).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt16.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt16.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt16.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt16.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt16.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt16.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt16.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt16.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-1.0,1.0));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; ÁßÀÌ¿°(otitismedia)
-tt17.fig=NULL
-tt17.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5,fx=T)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt17,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt17.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5,fx=T)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt17,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt17.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5,fx=T)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt17,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt17.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5,fx=T)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt17,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt17.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5,fx=T)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt17,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt17.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5,fx=T)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt17,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt17.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5,fx=T)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt17,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt17.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5,fx=T)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt17,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; ÁßÀÌ¿°(otitismedia)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\ÁßÀÌ¿°(otitismedia).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt17.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt17.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt17.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt17.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt17.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt17.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt17.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-0.5,0.5));abline(h=0,col="red")
-plot(tt17.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-0.5,0.5));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; Àå°¨¿°ÁúÈ¯(intestinal_infectious)
-tt18.fig=NULL
-tt18.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt18,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt18.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt18,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt18.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt18,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt18.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt18,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt18.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt18,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt18.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt18,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt18.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt18,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt18.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt18,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; Àå°¨¿°ÁúÈ¯(intestinal_infectious)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\Àå°¨¿°ÁúÈ¯(intestinal_infectious).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt18.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-0.2,0.2));abline(h=0,col="red")
-plot(tt18.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-0.2,0.2));abline(h=0,col="red")
-plot(tt18.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-0.2,0.2));abline(h=0,col="red")
-plot(tt18.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-0.2,0.2));abline(h=0,col="red")
-plot(tt18.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-0.2,0.2));abline(h=0,col="red")
-plot(tt18.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-0.2,0.2));abline(h=0,col="red")
-plot(tt18.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-0.2,0.2));abline(h=0,col="red")
-plot(tt18.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-0.2,0.2));abline(h=0,col="red")
-dev.off()
-
-#--------------------------------------------------------------------------#
-##GAMM,³ëÃâ ¹İÀÀ ±×¸², ´ÜÀÏ Áö¿¬; Ä¯ÇÊ·Î¹ÚÅÍ¼Ó°¨¿°(camp)
-tt20.fig=NULL
-tt20.fig$er0<-gamm(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt20,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt20.fig$er1<-gamm(outcome~s(maxtemp_lag1)+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt20,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt20.fig$er2<-gamm(outcome~s(maxtemp_lag2)+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt20,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt20.fig$er3<-gamm(outcome~s(maxtemp_lag3)+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt20,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt20.fig$er4<-gamm(outcome~s(maxtemp_lag4)+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt20,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt20.fig$er5<-gamm(outcome~s(maxtemp_lag5)+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt20,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt20.fig$er6<-gamm(outcome~s(maxtemp_lag6)+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt20,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-tt20.fig$er7<-gamm(outcome~s(maxtemp_lag7)+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt20,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=17000))
-
-##GAMM,³ëÃâ ¹İÀÀ ±×¸²ÀúÀå, ´ÜÀÏ Áö¿¬; Ä¯ÇÊ·Î¹ÚÅÍ¼Ó°¨¿°(camp)
-png(file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\Ä¯ÇÊ·Î¹ÚÅÍ¼Ó°¨¿°(camp).png",width=1600, height=800)
-par(mfrow=c(2,4),mar=c(5,5,5,5),oma=c(3,3,2,3))
-plot(tt20.fig$er0$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag0",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt20.fig$er1$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag1",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt20.fig$er2$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag2",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt20.fig$er3$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag3",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt20.fig$er4$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag4",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt20.fig$er5$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag5",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt20.fig$er6$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag6",ylim=c(-1.0,1.0));abline(h=0,col="red")
-plot(tt20.fig$er7$gam,select=1,scheme=1,cex.lab=2.5,cex.axis=2.5,cex.main=2.8,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Lag7",ylim=c(-1.0,1.0));abline(h=0,col="red")
-dev.off()
-#--------------------------------------------------------------------------#
-#--------------------------------------------------------------------------#
-#ÁúÈ¯º°·Î µµ½Ãº° ³ëÃâ-¹İÀÀ ±×¸² ±×¸®±â 
-sido.gam.func<-function(dataset,text,ylimin,ylimax){
-  dd<-dataset
-  sido01<-dd %>% filter(area=="¼­¿ï");sido02<-dd %>% filter(area=="ºÎ»ê")
-  sido03<-dd %>% filter(area=="´ë±¸");sido04<-dd %>% filter(area=="ÀÎÃµ")
-  sido05<-dd %>% filter(area=="±¤ÁÖ");sido06<-dd %>% filter(area=="´ëÀü")
-  sido07<-dd %>% filter(area=="¿ï»ê");sido08<-dd %>% filter(area=="°æ±â")
-  sido09<-dd %>% filter(area=="°­¿ø");sido10<-dd %>% filter(area=="ÃæºÏ")
-  sido11<-dd %>% filter(area=="Ãæ³²");sido12<-dd %>% filter(area=="ÀüºÏ")
-  sido13<-dd %>% filter(area=="Àü³²");sido14<-dd %>% filter(area=="°æºÏ")
-  sido15<-dd %>% filter(area=="°æ³²")
+library(dplyr)
+library(lubridate)
+library(readxl)
+library(metafor)
+library(mgcv)
+#ì¢…ê´€ê´€ì¸¡ì†Œ ì§€ì ì½”ë“œ í¬í•¨
+
+#------------------------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------------------------#
+setwd("D:\\EUMC\\ì§ˆë³‘ê´€ë¦¬ì²­\\í­ì—¼í›„ì†ì—°êµ¬\\data\\ì •ë¦¬ìë£Œ")
+mdis_dat<-read.csv("í†µê³„ì²­_5ì„¸ë¯¸ë§Œì‚¬ë§_2015_2020_revise0620.csv",fileEncoding = "euc-kr")
+
+
+mdis_dat$ddate=as.Date(mdis_dat$ddate)
+mdis_dat$area=factor(mdis_dat$area,levels=unique(mdis_dat$area))
+
+table(mdis_dat$area)
+#ì§€ì—­ë³„ í­ì—¼ ì¸ë±ìŠ¤ ë§Œë“¤ê¸° 
+
+z<-subset(mdis_dat,KOR_SIDO=="ì„œìš¸")
+
+summary(z$maxAT)
+quantile(z$maxAT,p=c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9),na.rm=T)
+quantile(z$maxAT,p=c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95),na.rm=T)
+
+#ì ˆëŒ€ì  ê¸°ì¤€: í­ì—¼ì—¬ë¶€ëŠ” ì¼ìµœê³ ì²´ê°ì˜¨ë„ 33â„ƒ ì´ìƒì¸ ê²½ìš°(ê¸°ìƒì²­ ê¸°ì¤€)
+#ì—¬ë¦„ì²  ì²´ê°ì˜¨ë„ ì‚°ì¶œì‹ ì´ìš©
+
+#ì§€ì—­ë³„ë¡œ ì¼ìµœê³ ì²´ê°ê¸°ì˜¨ ìë£Œ ì´ìš©, 3ì¼ ì´ì „ê¹Œì§€ ë‹¨ì¼ ì§€ì—°ìë£Œ ë§Œë“¤ì–´ì£¼ê¸° 
+#ë’¤ì— ì›”ì€ 5~9ì›”, 6~9ì›”, 6~8ì›”, ë“± ëª‡ìœ¼ë¡œ í• ì§€, í•œë²ˆ í†µì¼í•´ì•¼í• ë“¯ 
+
+#í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨ìœ¼ë¡œ ì‚°ì¶œ, ë¶„ìœ„ìˆ˜ë¡œ ì‚°ì¶œ 
+sub_func<-function(region,smonth,emonth){
+  d<-subset(mdis_dat,KOR_SIDO==region) %>% mutate(
+    
+    #ì¼ìµœê³ ê¸°ì˜¨
+    maxT    =maxtemp,       
+    maxT_s0 =lag(maxtemp,0),maxT_s1 =lag(maxtemp,1),maxT_s2 =lag(maxtemp,2),maxT_s3 =lag(maxtemp,3),
+    maxT_s4 =lag(maxtemp,4),maxT_s5 =lag(maxtemp,5),maxT_s6 =lag(maxtemp,6),maxT_s7 =lag(maxtemp,7),
+    
+    #ì¼ìµœê³ ì²´ê°ê¸°ì˜¨
+    maxAT_s0 =lag(maxAT,0),maxAT_s1 =lag(maxAT,1),maxAT_s2 =lag(maxAT,2),maxAT_s3 =lag(maxAT,3),
+    maxAT_s4 =lag(maxAT,4),maxAT_s5 =lag(maxAT,5),maxAT_s6 =lag(maxAT,6),maxAT_s7 =lag(maxAT,7),
+    
+    #ì—´ì§€ìˆ˜
+    HI_c_s0 =lag(HI_c,0),HI_c_s1 =lag(HI_c,1),HI_c_s2 =lag(HI_c,2),HI_c_s3 =lag(HI_c,3),
+    HI_c_s4 =lag(HI_c,4),HI_c_s5 =lag(HI_c,5),HI_c_s6 =lag(HI_c,6),HI_c_s7 =lag(HI_c,7),
+    
+    #ì—´ëŒ€ì•¼
+    TN_s0 =lag(TN,0),TN_s1 =lag(TN,1),TN_s2 =lag(TN,2),TN_s3 =lag(TN,3),
+    TN_s4 =lag(TN,4),TN_s5 =lag(TN,5),TN_s6 =lag(TN,6),TN_s7 =lag(TN,7),
+    
+    #ì¼êµì°¨
+    DT_s0 =lag(DT,0),DT_s1 =lag(DT,1),DT_s2 =lag(DT,2),DT_s3 =lag(DT,3),
+    DT_s4 =lag(DT,4),DT_s5 =lag(DT,5),DT_s6 =lag(DT,6),DT_s7 =lag(DT,7),
+    
+    #ì¼ì¼ ê¸°ì˜¨í¸ì°¨
+    temp_SD_s0 =lag(temp_SD,0),temp_SD_s1 =lag(temp_SD,1),temp_SD_s2 =lag(temp_SD,2),temp_SD_s3 =lag(temp_SD,3),
+    temp_SD_s4 =lag(temp_SD,4),temp_SD_s5 =lag(temp_SD,5),temp_SD_s6 =lag(temp_SD,6),temp_SD_s7 =lag(temp_SD,7),
+    
+    #ì¼ í‰ê·  ìŠµë„
+    meanhumi_s0 =lag(meanhumi,0),meanhumi_s1 =lag(meanhumi,1),meanhumi_s2 =lag(meanhumi,2),meanhumi_s3 =lag(meanhumi,3),
+    meanhumi_s4 =lag(meanhumi,4),meanhumi_s5 =lag(meanhumi,5),meanhumi_s6 =lag(meanhumi,6),meanhumi_s7 =lag(meanhumi,7),
+    
+    #ì¼ í‰ê·  ì´ìŠ¬ì 
+    meandew_s0 =lag(meandew,0),meandew_s1 =lag(meandew,1),meandew_s2 =lag(meandew,2),meandew_s3 =lag(meandew,3),
+    meandew_s4 =lag(meandew,4),meandew_s5 =lag(meandew,5),meandew_s6 =lag(meandew,6),meandew_s7 =lag(meandew,7))
   
-  gam01<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido01,family="quasipoisson")
-  gam02<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido02,family="quasipoisson")
-  gam03<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido03,family="quasipoisson")
-  gam04<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido04,family="quasipoisson")
-  gam05<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido05,family="quasipoisson")
-  gam06<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido06,family="quasipoisson")
-  gam07<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido07,family="quasipoisson")
-  gam08<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido08,family="quasipoisson")
-  gam09<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido09,family="quasipoisson")
-  gam10<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido10,family="quasipoisson")
-  gam11<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido11,family="quasipoisson")
-  gam12<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido12,family="quasipoisson")
-  gam13<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido13,family="quasipoisson")
-  gam14<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido14,family="quasipoisson")
-  gam15<-gam(outcome~s(maxtemp_lag0)+s(time,k=2*5)+s(meanhumi_lag0)+dow,data=sido15,family="quasipoisson")
+  #Moving average - maximum temperature
+  d$maxT_m1=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxT,maxT_s1)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxT,maxT_s1),1,mean))
+  d$maxT_m2=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxT,maxT_s2)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxT,maxT_s2),1,mean))
+  d$maxT_m3=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxT,maxT_s3)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxT,maxT_s3),1,mean))
+  d$maxT_m4=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxT,maxT_s4)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxT,maxT_s4),1,mean))
+  d$maxT_m5=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxT,maxT_s5)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxT,maxT_s5),1,mean))
+  d$maxT_m6=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxT,maxT_s6)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxT,maxT_s6),1,mean))
+  d$maxT_m7=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxT,maxT_s7)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxT,maxT_s7),1,mean))
   
-  png.save<-paste0("D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\20210928\\figure\\",text,".png")
+  #Moving average - maximum apparent temperature
+  d$maxAT_m1=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxAT,maxAT_s1)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxAT,maxAT_s1),1,mean))
+  d$maxAT_m2=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxAT,maxAT_s2)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxAT,maxAT_s2),1,mean))
+  d$maxAT_m3=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxAT,maxAT_s3)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxAT,maxAT_s3),1,mean))
+  d$maxAT_m4=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxAT,maxAT_s4)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxAT,maxAT_s4),1,mean))
+  d$maxAT_m5=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxAT,maxAT_s5)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxAT,maxAT_s5),1,mean))
+  d$maxAT_m6=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxAT,maxAT_s6)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxAT,maxAT_s6),1,mean))
+  d$maxAT_m7=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(maxAT,maxAT_s7)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(maxAT,maxAT_s7),1,mean))
   
-  png(file=png.save,width=1600, height=800)
-  par(mfrow=c(3,5),mar=c(5,5,5,5),oma=c(3,3,2,3))
-  plot(gam01,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="¼­¿ï",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam02,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="ºÎ»ê",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam03,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="´ë±¸",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam04,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="ÀÎÃµ",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam05,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="±¤ÁÖ",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam06,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="´ëÀü",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam07,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="¿ï»ê",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam08,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="°æ±â",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam09,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="°­¿ø",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam10,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="ÃæºÏ",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam11,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Ãæ³²",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam12,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="ÀüºÏ",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam13,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="Àü³²",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam14,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="°æºÏ",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  plot(gam15,select=1,scheme=1,cex.lab=2.3,cex.axis=2.3,cex.main=2.5,xlab="Maxtimum Temerature(¡ÆC)",ylab="log RR" ,main="°æ³²",ylim=c(ylimin,ylimax));abline(h=0,col="red")
-  dev.off()
+  #Moving average - heat index
+  d$HI_c_m1=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(HI_c,HI_c_s1)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(HI_c,HI_c_s1),1,mean))
+  d$HI_c_m2=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(HI_c,HI_c_s2)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(HI_c,HI_c_s2),1,mean))
+  d$HI_c_m3=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(HI_c,HI_c_s3)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(HI_c,HI_c_s3),1,mean))
+  d$HI_c_m4=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(HI_c,HI_c_s4)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(HI_c,HI_c_s4),1,mean))
+  d$HI_c_m5=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(HI_c,HI_c_s5)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(HI_c,HI_c_s5),1,mean))
+  d$HI_c_m6=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(HI_c,HI_c_s6)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(HI_c,HI_c_s6),1,mean))
+  d$HI_c_m7=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(HI_c,HI_c_s7)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(HI_c,HI_c_s7),1,mean))
+  
+  #Moving average - diurnal temperature
+  d$DT_m1=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(DT,DT_s1)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(DT,DT_s1),1,mean))
+  d$DT_m2=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(DT,DT_s2)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(DT,DT_s2),1,mean))
+  d$DT_m3=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(DT,DT_s3)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(DT,DT_s3),1,mean))
+  d$DT_m4=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(DT,DT_s4)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(DT,DT_s4),1,mean))
+  d$DT_m5=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(DT,DT_s5)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(DT,DT_s5),1,mean))
+  d$DT_m6=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(DT,DT_s6)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(DT,DT_s6),1,mean))
+  d$DT_m7=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(DT,DT_s7)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(DT,DT_s7),1,mean))
+  
+  #Moving average - temperautre SD
+  d$temp_SD_m1=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(temp_SD,temp_SD_s1)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(temp_SD,temp_SD_s1),1,mean))
+  d$temp_SD_m2=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(temp_SD,temp_SD_s2)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(temp_SD,temp_SD_s2),1,mean))
+  d$temp_SD_m3=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(temp_SD,temp_SD_s3)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(temp_SD,temp_SD_s3),1,mean))
+  d$temp_SD_m4=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(temp_SD,temp_SD_s4)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(temp_SD,temp_SD_s4),1,mean))
+  d$temp_SD_m5=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(temp_SD,temp_SD_s5)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(temp_SD,temp_SD_s5),1,mean))
+  d$temp_SD_m6=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(temp_SD,temp_SD_s6)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(temp_SD,temp_SD_s6),1,mean))
+  d$temp_SD_m7=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(temp_SD,temp_SD_s7)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(temp_SD,temp_SD_s7),1,mean))
+  
+  #Moving average - humidity
+  d$meanhumi_m1=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meanhumi,meanhumi_s1)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meanhumi,meanhumi_s1),1,mean))
+  d$meanhumi_m2=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meanhumi,meanhumi_s2)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meanhumi,meanhumi_s2),1,mean))
+  d$meanhumi_m3=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meanhumi,meanhumi_s3)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meanhumi,meanhumi_s3),1,mean))
+  d$meanhumi_m4=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meanhumi,meanhumi_s4)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meanhumi,meanhumi_s4),1,mean))
+  d$meanhumi_m5=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meanhumi,meanhumi_s5)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meanhumi,meanhumi_s5),1,mean))
+  d$meanhumi_m6=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meanhumi,meanhumi_s6)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meanhumi,meanhumi_s6),1,mean))
+  d$meanhumi_m7=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meanhumi,meanhumi_s7)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meanhumi,meanhumi_s7),1,mean))
+  
+  #Moving average - dew point temperautre
+  d$meandew_m1=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meandew,meandew_s1)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meandew,meandew_s1),1,mean))
+  d$meandew_m2=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meandew,meandew_s2)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meandew,meandew_s2),1,mean))
+  d$meandew_m3=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meandew,meandew_s3)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meandew,meandew_s3),1,mean))
+  d$meandew_m4=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meandew,meandew_s4)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meandew,meandew_s4),1,mean))
+  d$meandew_m5=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meandew,meandew_s5)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meandew,meandew_s5),1,mean))
+  d$meandew_m6=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meandew,meandew_s6)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meandew,meandew_s6),1,mean))
+  d$meandew_m7=ifelse(apply(ifelse(is.na(d %>% dplyr ::select(meandew,meandew_s7)),0,1),1,sum)==0,NA,apply(d %>% dplyr ::select(meandew,meandew_s7),1,mean))
+  
+  
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 33ë„ ê¸°ì¤€, 2ì¼ ì§€ì† 
+  d$hwD2_maxT_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1)>=33,1,0),1,sum)>=2,1,0))
+  d$hwD2_maxT_s1=lag(d$hwD2_maxT_s0,1);d$hwD2_maxT_s2=lag(d$hwD2_maxT_s0,2)
+  d$hwD2_maxT_s3=lag(d$hwD2_maxT_s0,3);d$hwD2_maxT_s4=lag(d$hwD2_maxT_s0,4)
+  d$hwD2_maxT_s5=lag(d$hwD2_maxT_s0,5);d$hwD2_maxT_s6=lag(d$hwD2_maxT_s0,6);d$hwD2_maxT_s7=lag(d$hwD2_maxT_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 33ë„ ê¸°ì¤€, 3ì¼ ì§€ì† 
+  d$hwD3_maxT_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1,maxT_s2)>=33,1,0),1,sum)>=3,1,0))
+  d$hwD3_maxT_s1=lag(d$hwD3_maxT_s0,1);d$hwD3_maxT_s2=lag(d$hwD3_maxT_s0,2)
+  d$hwD3_maxT_s3=lag(d$hwD3_maxT_s0,3);d$hwD3_maxT_s4=lag(d$hwD3_maxT_s0,4)
+  d$hwD3_maxT_s5=lag(d$hwD3_maxT_s0,5);d$hwD3_maxT_s6=lag(d$hwD3_maxT_s0,6);d$hwD3_maxT_s7=lag(d$hwD3_maxT_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 33ë„ ê¸°ì¤€, 2ì¼ ì§€ì†
+  d$hwD2_maxAT_s0=ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1)>=33,1,0),1,sum)>=2,1,0)
+  d$hwD2_maxAT_s1=lag(d$hwD2_maxAT_s0,1);d$hwD2_maxAT_s2=lag(d$hwD2_maxAT_s0,2)
+  d$hwD2_maxAT_s3=lag(d$hwD2_maxAT_s0,3);d$hwD2_maxAT_s4=lag(d$hwD2_maxAT_s0,4)
+  d$hwD2_maxAT_s5=lag(d$hwD2_maxAT_s0,5);d$hwD2_maxAT_s6=lag(d$hwD2_maxAT_s0,6);d$hwD2_maxAT_s7=lag(d$hwD2_maxAT_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 33ë„ ê¸°ì¤€, 3ì¼ ì§€ì† 
+  d$hwD3_maxAT_s0=ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1,maxAT_s2)>=33,1,0),1,sum)>=3,1,0)
+  d$hwD3_maxAT_s1=lag(d$hwD3_maxAT_s0,1);d$hwD3_maxAT_s2=lag(d$hwD3_maxAT_s0,2)
+  d$hwD3_maxAT_s3=lag(d$hwD3_maxAT_s0,3);d$hwD3_maxAT_s4=lag(d$hwD3_maxAT_s0,4)
+  d$hwD3_maxAT_s5=lag(d$hwD3_maxAT_s0,5);d$hwD3_maxAT_s6=lag(d$hwD3_maxAT_s0,6);d$hwD3_maxAT_s7=lag(d$hwD3_maxAT_s0,7)
+  
+  #---------------------------------------------------------------------------------------------------------------------------------------#
+  #---------------------------------------------------------------------------------------------------------------------------------------#
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 70th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxT_p70_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1)>=quantile(maxT,0.70,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxT_p70_s1=lag(d$hwD2_maxT_p70_s0,1);d$hwD2_maxT_p70_s2=lag(d$hwD2_maxT_p70_s0,2)
+  d$hwD2_maxT_p70_s3=lag(d$hwD2_maxT_p70_s0,3);d$hwD2_maxT_p70_s4=lag(d$hwD2_maxT_p70_s0,4)
+  d$hwD2_maxT_p70_s5=lag(d$hwD2_maxT_p70_s0,5);d$hwD2_maxT_p70_s6=lag(d$hwD2_maxT_p70_s0,6);d$hwD2_maxT_p70_s7=lag(d$hwD2_maxT_p70_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 75th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxT_p75_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1)>=quantile(maxT,0.75,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxT_p75_s1=lag(d$hwD2_maxT_p75_s0,1);d$hwD2_maxT_p75_s2=lag(d$hwD2_maxT_p75_s0,2)
+  d$hwD2_maxT_p75_s3=lag(d$hwD2_maxT_p75_s0,3);d$hwD2_maxT_p75_s4=lag(d$hwD2_maxT_p75_s0,4)
+  d$hwD2_maxT_p75_s5=lag(d$hwD2_maxT_p75_s0,5);d$hwD2_maxT_p75_s6=lag(d$hwD2_maxT_p75_s0,6);d$hwD2_maxT_p75_s7=lag(d$hwD2_maxT_p75_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 80th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxT_p80_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1)>=quantile(maxT,0.80,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxT_p80_s1=lag(d$hwD2_maxT_p80_s0,1);d$hwD2_maxT_p80_s2=lag(d$hwD2_maxT_p80_s0,2)
+  d$hwD2_maxT_p80_s3=lag(d$hwD2_maxT_p80_s0,3);d$hwD2_maxT_p80_s4=lag(d$hwD2_maxT_p80_s0,4)
+  d$hwD2_maxT_p80_s5=lag(d$hwD2_maxT_p80_s0,5);d$hwD2_maxT_p80_s6=lag(d$hwD2_maxT_p80_s0,6);d$hwD2_maxT_p80_s7=lag(d$hwD2_maxT_p80_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 85th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxT_p85_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1)>=quantile(maxT,0.85,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxT_p85_s1=lag(d$hwD2_maxT_p85_s0,1);d$hwD2_maxT_p85_s2=lag(d$hwD2_maxT_p85_s0,2)
+  d$hwD2_maxT_p85_s3=lag(d$hwD2_maxT_p85_s0,3);d$hwD2_maxT_p85_s4=lag(d$hwD2_maxT_p85_s0,4)
+  d$hwD2_maxT_p85_s5=lag(d$hwD2_maxT_p85_s0,5);d$hwD2_maxT_p85_s6=lag(d$hwD2_maxT_p85_s0,6);d$hwD2_maxT_p85_s7=lag(d$hwD2_maxT_p85_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 90th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxT_p90_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1)>=quantile(maxT,0.90,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxT_p90_s1=lag(d$hwD2_maxT_p90_s0,1);d$hwD2_maxT_p90_s2=lag(d$hwD2_maxT_p90_s0,2)
+  d$hwD2_maxT_p90_s3=lag(d$hwD2_maxT_p90_s0,3);d$hwD2_maxT_p90_s4=lag(d$hwD2_maxT_p90_s0,4)
+  d$hwD2_maxT_p90_s5=lag(d$hwD2_maxT_p90_s0,5);d$hwD2_maxT_p90_s6=lag(d$hwD2_maxT_p90_s0,6);d$hwD2_maxT_p90_s7=lag(d$hwD2_maxT_p90_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 91th percentile ì‚°ì¶œ 2ì¼ ì§€ì†
+  d$hwD2_maxT_p91_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1)>=quantile(maxT,0.91,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxT_p91_s1=lag(d$hwD2_maxT_p91_s0,1);d$hwD2_maxT_p91_s2=lag(d$hwD2_maxT_p91_s0,2)
+  d$hwD2_maxT_p91_s3=lag(d$hwD2_maxT_p91_s0,3);d$hwD2_maxT_p91_s4=lag(d$hwD2_maxT_p91_s0,4)
+  d$hwD2_maxT_p91_s5=lag(d$hwD2_maxT_p91_s0,5);d$hwD2_maxT_p91_s6=lag(d$hwD2_maxT_p91_s0,6);d$hwD2_maxT_p91_s7=lag(d$hwD2_maxT_p91_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 92th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxT_p92_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1)>=quantile(maxT,0.92,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxT_p92_s1=lag(d$hwD2_maxT_p92_s0,1);d$hwD2_maxT_p92_s2=lag(d$hwD2_maxT_p92_s0,2)
+  d$hwD2_maxT_p92_s3=lag(d$hwD2_maxT_p92_s0,3);d$hwD2_maxT_p92_s4=lag(d$hwD2_maxT_p92_s0,4)
+  d$hwD2_maxT_p92_s5=lag(d$hwD2_maxT_p92_s0,5);d$hwD2_maxT_p92_s6=lag(d$hwD2_maxT_p92_s0,6);d$hwD2_maxT_p92_s7=lag(d$hwD2_maxT_p92_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 93th percentile ì‚°ì¶œ 2ì¼ ì§€ì†  
+  d$hwD2_maxT_p93_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1)>=quantile(maxT,0.93,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxT_p93_s1=lag(d$hwD2_maxT_p93_s0,1);d$hwD2_maxT_p93_s2=lag(d$hwD2_maxT_p93_s0,2)
+  d$hwD2_maxT_p93_s3=lag(d$hwD2_maxT_p93_s0,3);d$hwD2_maxT_p93_s4=lag(d$hwD2_maxT_p93_s0,4)
+  d$hwD2_maxT_p93_s5=lag(d$hwD2_maxT_p93_s0,5);d$hwD2_maxT_p93_s6=lag(d$hwD2_maxT_p93_s0,6);d$hwD2_maxT_p93_s7=lag(d$hwD2_maxT_p93_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 94th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxT_p94_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1)>=quantile(maxT,0.94,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxT_p94_s1=lag(d$hwD2_maxT_p94_s0,1);d$hwD2_maxT_p94_s2=lag(d$hwD2_maxT_p94_s0,2)
+  d$hwD2_maxT_p94_s3=lag(d$hwD2_maxT_p94_s0,3);d$hwD2_maxT_p94_s4=lag(d$hwD2_maxT_p94_s0,4)
+  d$hwD2_maxT_p94_s5=lag(d$hwD2_maxT_p94_s0,5);d$hwD2_maxT_p94_s6=lag(d$hwD2_maxT_p94_s0,6);d$hwD2_maxT_p94_s7=lag(d$hwD2_maxT_p94_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 95th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxT_p95_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1)>=quantile(maxT,0.95,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxT_p95_s1=lag(d$hwD2_maxT_p95_s0,1);d$hwD2_maxT_p95_s2=lag(d$hwD2_maxT_p95_s0,2)
+  d$hwD2_maxT_p95_s3=lag(d$hwD2_maxT_p95_s0,3);d$hwD2_maxT_p95_s4=lag(d$hwD2_maxT_p95_s0,4)
+  d$hwD2_maxT_p95_s5=lag(d$hwD2_maxT_p95_s0,5);d$hwD2_maxT_p95_s6=lag(d$hwD2_maxT_p95_s0,6);d$hwD2_maxT_p95_s7=lag(d$hwD2_maxT_p95_s0,7)
+  
+  #---------------------------------------------------------------------------------------------------------------------------------------#
+  #---------------------------------------------------------------------------------------------------------------------------------------#
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 70th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxT_p70_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1,maxT_s2)>=quantile(maxT,0.70,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxT_p70_s1=lag(d$hwD3_maxT_p70_s0,1);d$hwD3_maxT_p70_s2=lag(d$hwD3_maxT_p70_s0,2)
+  d$hwD3_maxT_p70_s3=lag(d$hwD3_maxT_p70_s0,3);d$hwD3_maxT_p70_s4=lag(d$hwD3_maxT_p70_s0,4)
+  d$hwD3_maxT_p70_s5=lag(d$hwD3_maxT_p70_s0,5);d$hwD3_maxT_p70_s6=lag(d$hwD3_maxT_p70_s0,6);d$hwD3_maxT_p70_s7=lag(d$hwD3_maxT_p70_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 75th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxT_p75_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1,maxT_s2)>=quantile(maxT,0.75,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxT_p75_s1=lag(d$hwD3_maxT_p75_s0,1);d$hwD3_maxT_p75_s2=lag(d$hwD3_maxT_p75_s0,2)
+  d$hwD3_maxT_p75_s3=lag(d$hwD3_maxT_p75_s0,3);d$hwD3_maxT_p75_s4=lag(d$hwD3_maxT_p75_s0,4)
+  d$hwD3_maxT_p75_s5=lag(d$hwD3_maxT_p75_s0,5);d$hwD3_maxT_p75_s6=lag(d$hwD3_maxT_p75_s0,6);d$hwD3_maxT_p75_s7=lag(d$hwD3_maxT_p75_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 80th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxT_p80_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1,maxT_s2)>=quantile(maxT,0.80,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxT_p80_s1=lag(d$hwD3_maxT_p80_s0,1);d$hwD3_maxT_p80_s2=lag(d$hwD3_maxT_p80_s0,2)
+  d$hwD3_maxT_p80_s3=lag(d$hwD3_maxT_p80_s0,3);d$hwD3_maxT_p80_s4=lag(d$hwD3_maxT_p80_s0,4)
+  d$hwD3_maxT_p80_s5=lag(d$hwD3_maxT_p80_s0,5);d$hwD3_maxT_p80_s6=lag(d$hwD3_maxT_p80_s0,6);d$hwD3_maxT_p80_s7=lag(d$hwD3_maxT_p80_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 85th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxT_p85_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1,maxT_s2)>=quantile(maxT,0.85,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxT_p85_s1=lag(d$hwD3_maxT_p85_s0,1);d$hwD3_maxT_p85_s2=lag(d$hwD3_maxT_p85_s0,2)
+  d$hwD3_maxT_p85_s3=lag(d$hwD3_maxT_p85_s0,3);d$hwD3_maxT_p85_s4=lag(d$hwD3_maxT_p85_s0,4)
+  d$hwD3_maxT_p85_s5=lag(d$hwD3_maxT_p85_s0,5);d$hwD3_maxT_p85_s6=lag(d$hwD3_maxT_p85_s0,6);d$hwD3_maxT_p85_s7=lag(d$hwD3_maxT_p85_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 90th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxT_p90_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1,maxT_s2)>=quantile(maxT,0.90,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxT_p90_s1=lag(d$hwD3_maxT_p90_s0,1);d$hwD3_maxT_p90_s2=lag(d$hwD3_maxT_p90_s0,2)
+  d$hwD3_maxT_p90_s3=lag(d$hwD3_maxT_p90_s0,3);d$hwD3_maxT_p90_s4=lag(d$hwD3_maxT_p90_s0,4)
+  d$hwD3_maxT_p90_s5=lag(d$hwD3_maxT_p90_s0,5);d$hwD3_maxT_p90_s6=lag(d$hwD3_maxT_p90_s0,6);d$hwD3_maxT_p90_s7=lag(d$hwD3_maxT_p90_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 91th percentile ì‚°ì¶œ 3ì¼ ì§€ì†
+  d$hwD3_maxT_p91_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1,maxT_s2)>=quantile(maxT,0.91,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxT_p91_s1=lag(d$hwD3_maxT_p91_s0,1);d$hwD3_maxT_p91_s2=lag(d$hwD3_maxT_p91_s0,2)
+  d$hwD3_maxT_p91_s3=lag(d$hwD3_maxT_p91_s0,3);d$hwD3_maxT_p91_s4=lag(d$hwD3_maxT_p91_s0,4)
+  d$hwD3_maxT_p91_s5=lag(d$hwD3_maxT_p91_s0,5);d$hwD3_maxT_p91_s6=lag(d$hwD3_maxT_p91_s0,6);d$hwD3_maxT_p91_s7=lag(d$hwD3_maxT_p91_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 92th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxT_p92_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1,maxT_s2)>=quantile(maxT,0.92,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxT_p92_s1=lag(d$hwD3_maxT_p92_s0,1);d$hwD3_maxT_p92_s2=lag(d$hwD3_maxT_p92_s0,2)
+  d$hwD3_maxT_p92_s3=lag(d$hwD3_maxT_p92_s0,3);d$hwD3_maxT_p92_s4=lag(d$hwD3_maxT_p92_s0,4)
+  d$hwD3_maxT_p92_s5=lag(d$hwD3_maxT_p92_s0,5);d$hwD3_maxT_p92_s6=lag(d$hwD3_maxT_p92_s0,6);d$hwD3_maxT_p92_s7=lag(d$hwD3_maxT_p92_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 93th percentile ì‚°ì¶œ 3ì¼ ì§€ì†  
+  d$hwD3_maxT_p93_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1,maxT_s2)>=quantile(maxT,0.93,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxT_p93_s1=lag(d$hwD3_maxT_p93_s0,1);d$hwD3_maxT_p93_s2=lag(d$hwD3_maxT_p93_s0,2)
+  d$hwD3_maxT_p93_s3=lag(d$hwD3_maxT_p93_s0,3);d$hwD3_maxT_p93_s4=lag(d$hwD3_maxT_p93_s0,4)
+  d$hwD3_maxT_p93_s5=lag(d$hwD3_maxT_p93_s0,5);d$hwD3_maxT_p93_s6=lag(d$hwD3_maxT_p93_s0,6);d$hwD3_maxT_p93_s7=lag(d$hwD3_maxT_p93_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 94th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxT_p94_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1,maxT_s2)>=quantile(maxT,0.94,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxT_p94_s1=lag(d$hwD3_maxT_p94_s0,1);d$hwD3_maxT_p94_s2=lag(d$hwD3_maxT_p94_s0,2)
+  d$hwD3_maxT_p94_s3=lag(d$hwD3_maxT_p94_s0,3);d$hwD3_maxT_p94_s4=lag(d$hwD3_maxT_p94_s0,4)
+  d$hwD3_maxT_p94_s5=lag(d$hwD3_maxT_p94_s0,5);d$hwD3_maxT_p94_s6=lag(d$hwD3_maxT_p94_s0,6);d$hwD3_maxT_p94_s7=lag(d$hwD3_maxT_p94_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ê¸°ì˜¨, 95th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxT_p95_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxT,maxT_s1,maxT_s2)>=quantile(maxT,0.95,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxT_p95_s1=lag(d$hwD3_maxT_p95_s0,1);d$hwD3_maxT_p95_s2=lag(d$hwD3_maxT_p95_s0,2)
+  d$hwD3_maxT_p95_s3=lag(d$hwD3_maxT_p95_s0,3);d$hwD3_maxT_p95_s4=lag(d$hwD3_maxT_p95_s0,4)
+  d$hwD3_maxT_p95_s5=lag(d$hwD3_maxT_p95_s0,5);d$hwD3_maxT_p95_s6=lag(d$hwD3_maxT_p95_s0,6);d$hwD3_maxT_p95_s7=lag(d$hwD3_maxT_p95_s0,7)
+  
+  
+  #---------------------------------------------------------------------------------------------------------------------------------------#
+  #---------------------------------------------------------------------------------------------------------------------------------------#
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 70th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxAT_p70_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1)>=quantile(maxAT,0.70,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxAT_p70_s1=lag(d$hwD2_maxAT_p70_s0,1);d$hwD2_maxAT_p70_s2=lag(d$hwD2_maxAT_p70_s0,2)
+  d$hwD2_maxAT_p70_s3=lag(d$hwD2_maxAT_p70_s0,3);d$hwD2_maxAT_p70_s4=lag(d$hwD2_maxAT_p70_s0,4)
+  d$hwD2_maxAT_p70_s5=lag(d$hwD2_maxAT_p70_s0,5);d$hwD2_maxAT_p70_s6=lag(d$hwD2_maxAT_p70_s0,6);d$hwD2_maxAT_p70_s7=lag(d$hwD2_maxAT_p70_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 75th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxAT_p75_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1)>=quantile(maxAT,0.75,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxAT_p75_s1=lag(d$hwD2_maxAT_p75_s0,1);d$hwD2_maxAT_p75_s2=lag(d$hwD2_maxAT_p75_s0,2)
+  d$hwD2_maxAT_p75_s3=lag(d$hwD2_maxAT_p75_s0,3);d$hwD2_maxAT_p75_s4=lag(d$hwD2_maxAT_p75_s0,4)
+  d$hwD2_maxAT_p75_s5=lag(d$hwD2_maxAT_p75_s0,5);d$hwD2_maxAT_p75_s6=lag(d$hwD2_maxAT_p75_s0,6);d$hwD2_maxAT_p75_s7=lag(d$hwD2_maxAT_p75_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 80th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxAT_p80_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1)>=quantile(maxAT,0.80,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxAT_p80_s1=lag(d$hwD2_maxAT_p80_s0,1);d$hwD2_maxAT_p80_s2=lag(d$hwD2_maxAT_p80_s0,2)
+  d$hwD2_maxAT_p80_s3=lag(d$hwD2_maxAT_p80_s0,3);d$hwD2_maxAT_p80_s4=lag(d$hwD2_maxAT_p80_s0,4)
+  d$hwD2_maxAT_p80_s5=lag(d$hwD2_maxAT_p80_s0,5);d$hwD2_maxAT_p80_s6=lag(d$hwD2_maxAT_p80_s0,6);d$hwD2_maxAT_p80_s7=lag(d$hwD2_maxAT_p80_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 85th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxAT_p85_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1)>=quantile(maxAT,0.85,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxAT_p85_s1=lag(d$hwD2_maxAT_p85_s0,1);d$hwD2_maxAT_p85_s2=lag(d$hwD2_maxAT_p85_s0,2)
+  d$hwD2_maxAT_p85_s3=lag(d$hwD2_maxAT_p85_s0,3);d$hwD2_maxAT_p85_s4=lag(d$hwD2_maxAT_p85_s0,4)
+  d$hwD2_maxAT_p85_s5=lag(d$hwD2_maxAT_p85_s0,5);d$hwD2_maxAT_p85_s6=lag(d$hwD2_maxAT_p85_s0,6);d$hwD2_maxAT_p85_s7=lag(d$hwD2_maxAT_p85_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 90th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxAT_p90_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1)>=quantile(maxAT,0.90,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxAT_p90_s1=lag(d$hwD2_maxAT_p90_s0,1);d$hwD2_maxAT_p90_s2=lag(d$hwD2_maxAT_p90_s0,2)
+  d$hwD2_maxAT_p90_s3=lag(d$hwD2_maxAT_p90_s0,3);d$hwD2_maxAT_p90_s4=lag(d$hwD2_maxAT_p90_s0,4)
+  d$hwD2_maxAT_p90_s5=lag(d$hwD2_maxAT_p90_s0,5);d$hwD2_maxAT_p90_s6=lag(d$hwD2_maxAT_p90_s0,6);d$hwD2_maxAT_p90_s7=lag(d$hwD2_maxAT_p90_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 91th percentile ì‚°ì¶œ 2ì¼ ì§€ì†
+  d$hwD2_maxAT_p91_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1)>=quantile(maxAT,0.91,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxAT_p91_s1=lag(d$hwD2_maxAT_p91_s0,1);d$hwD2_maxAT_p91_s2=lag(d$hwD2_maxAT_p91_s0,2)
+  d$hwD2_maxAT_p91_s3=lag(d$hwD2_maxAT_p91_s0,3);d$hwD2_maxAT_p91_s4=lag(d$hwD2_maxAT_p91_s0,4)
+  d$hwD2_maxAT_p91_s5=lag(d$hwD2_maxAT_p91_s0,5);d$hwD2_maxAT_p91_s6=lag(d$hwD2_maxAT_p91_s0,6);d$hwD2_maxAT_p91_s7=lag(d$hwD2_maxAT_p91_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 92th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxAT_p92_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1)>=quantile(maxAT,0.92,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxAT_p92_s1=lag(d$hwD2_maxAT_p92_s0,1);d$hwD2_maxAT_p92_s2=lag(d$hwD2_maxAT_p92_s0,2)
+  d$hwD2_maxAT_p92_s3=lag(d$hwD2_maxAT_p92_s0,3);d$hwD2_maxAT_p92_s4=lag(d$hwD2_maxAT_p92_s0,4)
+  d$hwD2_maxAT_p92_s5=lag(d$hwD2_maxAT_p92_s0,5);d$hwD2_maxAT_p92_s6=lag(d$hwD2_maxAT_p92_s0,6);d$hwD2_maxAT_p92_s7=lag(d$hwD2_maxAT_p92_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 93th percentile ì‚°ì¶œ 2ì¼ ì§€ì†  
+  d$hwD2_maxAT_p93_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1)>=quantile(maxAT,0.93,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxAT_p93_s1=lag(d$hwD2_maxAT_p93_s0,1);d$hwD2_maxAT_p93_s2=lag(d$hwD2_maxAT_p93_s0,2)
+  d$hwD2_maxAT_p93_s3=lag(d$hwD2_maxAT_p93_s0,3);d$hwD2_maxAT_p93_s4=lag(d$hwD2_maxAT_p93_s0,4)
+  d$hwD2_maxAT_p93_s5=lag(d$hwD2_maxAT_p93_s0,5);d$hwD2_maxAT_p93_s6=lag(d$hwD2_maxAT_p93_s0,6);d$hwD2_maxAT_p93_s7=lag(d$hwD2_maxAT_p93_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 94th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxAT_p94_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1)>=quantile(maxAT,0.94,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxAT_p94_s1=lag(d$hwD2_maxAT_p94_s0,1);d$hwD2_maxAT_p94_s2=lag(d$hwD2_maxAT_p94_s0,2)
+  d$hwD2_maxAT_p94_s3=lag(d$hwD2_maxAT_p94_s0,3);d$hwD2_maxAT_p94_s4=lag(d$hwD2_maxAT_p94_s0,4)
+  d$hwD2_maxAT_p94_s5=lag(d$hwD2_maxAT_p94_s0,5);d$hwD2_maxAT_p94_s6=lag(d$hwD2_maxAT_p94_s0,6);d$hwD2_maxAT_p94_s7=lag(d$hwD2_maxAT_p94_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 95th percentile ì‚°ì¶œ 2ì¼ ì§€ì† 
+  d$hwD2_maxAT_p95_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1)>=quantile(maxAT,0.95,na.rm=T),1,0),1,sum)>=2,1,0))
+  d$hwD2_maxAT_p95_s1=lag(d$hwD2_maxAT_p95_s0,1);d$hwD2_maxAT_p95_s2=lag(d$hwD2_maxAT_p95_s0,2)
+  d$hwD2_maxAT_p95_s3=lag(d$hwD2_maxAT_p95_s0,3);d$hwD2_maxAT_p95_s4=lag(d$hwD2_maxAT_p95_s0,4)
+  d$hwD2_maxAT_p95_s5=lag(d$hwD2_maxAT_p95_s0,5);d$hwD2_maxAT_p95_s6=lag(d$hwD2_maxAT_p95_s0,6);d$hwD2_maxAT_p95_s7=lag(d$hwD2_maxAT_p95_s0,7)
+  
+  #---------------------------------------------------------------------------------------------------------------------------------------#
+  #---------------------------------------------------------------------------------------------------------------------------------------#
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 70th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxAT_p70_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1,maxAT_s2)>=quantile(maxAT,0.70,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxAT_p70_s1=lag(d$hwD3_maxAT_p70_s0,1);d$hwD3_maxAT_p70_s2=lag(d$hwD3_maxAT_p70_s0,2)
+  d$hwD3_maxAT_p70_s3=lag(d$hwD3_maxAT_p70_s0,3);d$hwD3_maxAT_p70_s4=lag(d$hwD3_maxAT_p70_s0,4)
+  d$hwD3_maxAT_p70_s5=lag(d$hwD3_maxAT_p70_s0,5);d$hwD3_maxAT_p70_s6=lag(d$hwD3_maxAT_p70_s0,6);d$hwD3_maxAT_p70_s7=lag(d$hwD3_maxAT_p70_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 75th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxAT_p75_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1,maxAT_s2)>=quantile(maxAT,0.75,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxAT_p75_s1=lag(d$hwD3_maxAT_p75_s0,1);d$hwD3_maxAT_p75_s2=lag(d$hwD3_maxAT_p75_s0,2)
+  d$hwD3_maxAT_p75_s3=lag(d$hwD3_maxAT_p75_s0,3);d$hwD3_maxAT_p75_s4=lag(d$hwD3_maxAT_p75_s0,4)
+  d$hwD3_maxAT_p75_s5=lag(d$hwD3_maxAT_p75_s0,5);d$hwD3_maxAT_p75_s6=lag(d$hwD3_maxAT_p75_s0,6);d$hwD3_maxAT_p75_s7=lag(d$hwD3_maxAT_p75_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 80th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxAT_p80_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1,maxAT_s2)>=quantile(maxAT,0.80,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxAT_p80_s1=lag(d$hwD3_maxAT_p80_s0,1);d$hwD3_maxAT_p80_s2=lag(d$hwD3_maxAT_p80_s0,2)
+  d$hwD3_maxAT_p80_s3=lag(d$hwD3_maxAT_p80_s0,3);d$hwD3_maxAT_p80_s4=lag(d$hwD3_maxAT_p80_s0,4)
+  d$hwD3_maxAT_p80_s5=lag(d$hwD3_maxAT_p80_s0,5);d$hwD3_maxAT_p80_s6=lag(d$hwD3_maxAT_p80_s0,6);d$hwD3_maxAT_p80_s7=lag(d$hwD3_maxAT_p80_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 85th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxAT_p85_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1,maxAT_s2)>=quantile(maxAT,0.85,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxAT_p85_s1=lag(d$hwD3_maxAT_p85_s0,1);d$hwD3_maxAT_p85_s2=lag(d$hwD3_maxAT_p85_s0,2)
+  d$hwD3_maxAT_p85_s3=lag(d$hwD3_maxAT_p85_s0,3);d$hwD3_maxAT_p85_s4=lag(d$hwD3_maxAT_p85_s0,4)
+  d$hwD3_maxAT_p85_s5=lag(d$hwD3_maxAT_p85_s0,5);d$hwD3_maxAT_p85_s6=lag(d$hwD3_maxAT_p85_s0,6);d$hwD3_maxAT_p85_s7=lag(d$hwD3_maxAT_p85_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 90th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxAT_p90_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1,maxAT_s2)>=quantile(maxAT,0.90,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxAT_p90_s1=lag(d$hwD3_maxAT_p90_s0,1);d$hwD3_maxAT_p90_s2=lag(d$hwD3_maxAT_p90_s0,2)
+  d$hwD3_maxAT_p90_s3=lag(d$hwD3_maxAT_p90_s0,3);d$hwD3_maxAT_p90_s4=lag(d$hwD3_maxAT_p90_s0,4)
+  d$hwD3_maxAT_p90_s5=lag(d$hwD3_maxAT_p90_s0,5);d$hwD3_maxAT_p90_s6=lag(d$hwD3_maxAT_p90_s0,6);d$hwD3_maxAT_p90_s7=lag(d$hwD3_maxAT_p90_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 91th percentile ì‚°ì¶œ 3ì¼ ì§€ì†
+  d$hwD3_maxAT_p91_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1,maxAT_s2)>=quantile(maxAT,0.91,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxAT_p91_s1=lag(d$hwD3_maxAT_p91_s0,1);d$hwD3_maxAT_p91_s2=lag(d$hwD3_maxAT_p91_s0,2)
+  d$hwD3_maxAT_p91_s3=lag(d$hwD3_maxAT_p91_s0,3);d$hwD3_maxAT_p91_s4=lag(d$hwD3_maxAT_p91_s0,4)
+  d$hwD3_maxAT_p91_s5=lag(d$hwD3_maxAT_p91_s0,5);d$hwD3_maxAT_p91_s6=lag(d$hwD3_maxAT_p91_s0,6);d$hwD3_maxAT_p91_s7=lag(d$hwD3_maxAT_p91_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 92th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxAT_p92_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1,maxAT_s2)>=quantile(maxAT,0.92,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxAT_p92_s1=lag(d$hwD3_maxAT_p92_s0,1);d$hwD3_maxAT_p92_s2=lag(d$hwD3_maxAT_p92_s0,2)
+  d$hwD3_maxAT_p92_s3=lag(d$hwD3_maxAT_p92_s0,3);d$hwD3_maxAT_p92_s4=lag(d$hwD3_maxAT_p92_s0,4)
+  d$hwD3_maxAT_p92_s5=lag(d$hwD3_maxAT_p92_s0,5);d$hwD3_maxAT_p92_s6=lag(d$hwD3_maxAT_p92_s0,6);d$hwD3_maxAT_p92_s7=lag(d$hwD3_maxAT_p92_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 93th percentile ì‚°ì¶œ 3ì¼ ì§€ì†  
+  d$hwD3_maxAT_p93_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1,maxAT_s2)>=quantile(maxAT,0.93,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxAT_p93_s1=lag(d$hwD3_maxAT_p93_s0,1);d$hwD3_maxAT_p93_s2=lag(d$hwD3_maxAT_p93_s0,2)
+  d$hwD3_maxAT_p93_s3=lag(d$hwD3_maxAT_p93_s0,3);d$hwD3_maxAT_p93_s4=lag(d$hwD3_maxAT_p93_s0,4)
+  d$hwD3_maxAT_p93_s5=lag(d$hwD3_maxAT_p93_s0,5);d$hwD3_maxAT_p93_s6=lag(d$hwD3_maxAT_p93_s0,6);d$hwD3_maxAT_p93_s7=lag(d$hwD3_maxAT_p93_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 94th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxAT_p94_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1,maxAT_s2)>=quantile(maxAT,0.94,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxAT_p94_s1=lag(d$hwD3_maxAT_p94_s0,1);d$hwD3_maxAT_p94_s2=lag(d$hwD3_maxAT_p94_s0,2)
+  d$hwD3_maxAT_p94_s3=lag(d$hwD3_maxAT_p94_s0,3);d$hwD3_maxAT_p94_s4=lag(d$hwD3_maxAT_p94_s0,4)
+  d$hwD3_maxAT_p94_s5=lag(d$hwD3_maxAT_p94_s0,5);d$hwD3_maxAT_p94_s6=lag(d$hwD3_maxAT_p94_s0,6);d$hwD3_maxAT_p94_s7=lag(d$hwD3_maxAT_p94_s0,7)
+  
+  #í­ì—¼, ì¼ìµœê³ ì²´ê°ê¸°ì˜¨, 95th percentile ì‚°ì¶œ 3ì¼ ì§€ì† 
+  d$hwD3_maxAT_p95_s0=with(d,ifelse(apply(ifelse(d %>% dplyr::select(maxAT,maxAT_s1,maxAT_s2)>=quantile(maxAT,0.95,na.rm=T),1,0),1,sum)>=3,1,0))
+  d$hwD3_maxAT_p95_s1=lag(d$hwD3_maxAT_p95_s0,1);d$hwD3_maxAT_p95_s2=lag(d$hwD3_maxAT_p95_s0,2)
+  d$hwD3_maxAT_p95_s3=lag(d$hwD3_maxAT_p95_s0,3);d$hwD3_maxAT_p95_s4=lag(d$hwD3_maxAT_p95_s0,4)
+  d$hwD3_maxAT_p95_s5=lag(d$hwD3_maxAT_p95_s0,5);d$hwD3_maxAT_p95_s6=lag(d$hwD3_maxAT_p95_s0,6);d$hwD3_maxAT_p95_s7=lag(d$hwD3_maxAT_p95_s0,7)
+  
+  #ì „ì²´ ìë£Œì—ì„œ ê´€ì°°í•˜ê³ ì í•˜ëŠ” í­ì—¼ ë…¸ì¶œ ê¸°ê°„ë§Œ 
+  d2<-d %>% filter(month %in% c(smonth:emonth))
+  d2}
+
+mdis_s01<-sub_func("ì„œìš¸",6,9)
+mdis_s02<-sub_func("ë¶€ì‚°",6,9)
+mdis_s03<-sub_func("ëŒ€êµ¬",6,9)
+mdis_s04<-sub_func("ì¸ì²œ",6,9)
+mdis_s05<-sub_func("ê´‘ì£¼",6,9)
+mdis_s06<-sub_func("ëŒ€ì „",6,9)
+mdis_s07<-sub_func("ìš¸ì‚°",6,9)
+mdis_s08<-sub_func("ì„¸ì¢…",6,9)
+mdis_s09<-sub_func("ê²½ê¸°",6,9)
+mdis_s10<-sub_func("ê°•ì›",6,9)
+mdis_s11<-sub_func("ì¶©ë¶",6,9)
+mdis_s12<-sub_func("ì¶©ë‚¨",6,9)
+mdis_s13<-sub_func("ì „ë¶",6,9)
+mdis_s14<-sub_func("ì „ë‚¨",6,9)
+mdis_s15<-sub_func("ê²½ë¶",6,9)
+mdis_s16<-sub_func("ê²½ë‚¨",6,9)
+mdis_s17<-sub_func("ì œì£¼",6,9)
+
+#------------------------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------------------------#
+#ë„ì‹œë³„ ì‚°ì¶œìë£Œ ì·¨í•©
+mdis_dat2<-rbind(mdis_s01,mdis_s02,mdis_s03,mdis_s04,
+                 mdis_s05,mdis_s06,mdis_s07,mdis_s08,
+                 mdis_s09,mdis_s10,mdis_s11,mdis_s12,
+                 mdis_s13,mdis_s14,mdis_s15,mdis_s16,mdis_s17)
+
+with(mdis_dat2,table(area,TN)) 
+
+#ì¼ìµœê³ ê¸°ì˜¨ ì ˆëŒ€ì˜¨ë„(33), ìƒëŒ€ì˜¨ë„, ì´í‹€ ì´ìƒ ì§€ì†ìœ¼ë¡œ ì •ì˜í•œ í­ì—¼ ì§€ì—­ë³„ ë¹ˆë„
+hwD2_maxT_city_tb<-cbind(with(mdis_dat2,table(area,hwD2_maxT_s0))    ,with(mdis_dat2,table(area,hwD2_maxT_p70_s0)),
+                         with(mdis_dat2,table(area,hwD2_maxT_p75_s0)),with(mdis_dat2,table(area,hwD2_maxT_p80_s0)),
+                         with(mdis_dat2,table(area,hwD2_maxT_p85_s0)),with(mdis_dat2,table(area,hwD2_maxT_p90_s0)),
+                         with(mdis_dat2,table(area,hwD2_maxT_p91_s0)),with(mdis_dat2,table(area,hwD2_maxT_p92_s0)),
+                         with(mdis_dat2,table(area,hwD2_maxT_p93_s0)),with(mdis_dat2,table(area,hwD2_maxT_p94_s0)),
+                         with(mdis_dat2,table(area,hwD2_maxT_p95_s0))) %>% as.data.frame
+
+#ì¼ìµœê³ ê¸°ì˜¨ ì ˆëŒ€ì˜¨ë„(33), ìƒëŒ€ì˜¨ë„, ì‚¼ì¼ ì´ìƒ ì§€ì†ìœ¼ë¡œ ì •ì˜í•œ í­ì—¼ ì§€ì—­ë³„ ë¹ˆë„
+hwD3_maxT_city_tb<-cbind(with(mdis_dat2,table(area,hwD3_maxT_s0))    ,with(mdis_dat2,table(area,hwD3_maxT_p70_s0)),
+                         with(mdis_dat2,table(area,hwD3_maxT_p75_s0)),with(mdis_dat2,table(area,hwD3_maxT_p80_s0)),
+                         with(mdis_dat2,table(area,hwD3_maxT_p85_s0)),with(mdis_dat2,table(area,hwD3_maxT_p90_s0)),
+                         with(mdis_dat2,table(area,hwD3_maxT_p91_s0)),with(mdis_dat2,table(area,hwD3_maxT_p92_s0)),
+                         with(mdis_dat2,table(area,hwD3_maxT_p93_s0)),with(mdis_dat2,table(area,hwD3_maxT_p94_s0)),
+                         with(mdis_dat2,table(area,hwD3_maxT_p95_s0))) %>% as.data.frame
+
+#ì¼ìµœê³ ì²´ê°ê¸°ì˜¨ ì ˆëŒ€ì˜¨ë„(33), ìƒëŒ€ì˜¨ë„, ì´í‹€ ì´ìƒ ì§€ì†ìœ¼ë¡œ ì •ì˜í•œ í­ì—¼ ì§€ì—­ë³„ ë¹ˆë„
+hwD2_maxAT_city_tb<-cbind(with(mdis_dat2,table(area,hwD2_maxAT_s0))   ,with(mdis_dat2,table(area,hwD2_maxAT_p70_s0)),
+                         with(mdis_dat2,table(area,hwD2_maxAT_p75_s0)),with(mdis_dat2,table(area,hwD2_maxAT_p80_s0)),
+                         with(mdis_dat2,table(area,hwD2_maxAT_p85_s0)),with(mdis_dat2,table(area,hwD2_maxAT_p90_s0)),
+                         with(mdis_dat2,table(area,hwD2_maxAT_p91_s0)),with(mdis_dat2,table(area,hwD2_maxAT_p92_s0)),
+                         with(mdis_dat2,table(area,hwD2_maxAT_p93_s0)),with(mdis_dat2,table(area,hwD2_maxAT_p94_s0)),
+                         with(mdis_dat2,table(area,hwD2_maxAT_p95_s0))) %>% as.data.frame
+
+#ì¼ìµœê³ ì²´ê°ê¸°ì˜¨ ì ˆëŒ€ì˜¨ë„(33), ìƒëŒ€ì˜¨ë„, ì‚¼ì¼ ì´ìƒ ì§€ì†ìœ¼ë¡œ ì •ì˜í•œ í­ì—¼ ì§€ì—­ë³„ ë¹ˆë„
+hwD3_maxAT_city_tb<-cbind(with(mdis_dat2,table(area,hwD3_maxAT_s0))   ,with(mdis_dat2,table(area,hwD3_maxAT_p70_s0)),
+                         with(mdis_dat2,table(area,hwD3_maxAT_p75_s0)),with(mdis_dat2,table(area,hwD3_maxAT_p80_s0)),
+                         with(mdis_dat2,table(area,hwD3_maxAT_p85_s0)),with(mdis_dat2,table(area,hwD3_maxAT_p90_s0)),
+                         with(mdis_dat2,table(area,hwD3_maxAT_p91_s0)),with(mdis_dat2,table(area,hwD3_maxAT_p92_s0)),
+                         with(mdis_dat2,table(area,hwD3_maxAT_p93_s0)),with(mdis_dat2,table(area,hwD3_maxAT_p94_s0)),
+                         with(mdis_dat2,table(area,hwD3_maxAT_p95_s0))) %>% as.data.frame
+
+setwd("D:\\EUMC\\ì§ˆë³‘ê´€ë¦¬ì²­\\í­ì—¼í›„ì†ì—°êµ¬\\ë¶„ì„\\5ì„¸ë¯¸ë§Œì‚¬ë§")
+write.csv(hwD2_maxT_city_tb ,file="hwD2_maxT_city_tb.csv" ,row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxT_city_tb ,file="hwD3_maxT_city_tb.csv" ,row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxAT_city_tb,file="hwD2_maxAT_city_tb.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxAT_city_tb,file="hwD3_maxAT_city_tb.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+d01<-subset(mdis_dat,KOR_SIDO=="ì„œìš¸");d02<-subset(mdis_dat,KOR_SIDO=="ë¶€ì‚°")
+d03<-subset(mdis_dat,KOR_SIDO=="ëŒ€êµ¬");d04<-subset(mdis_dat,KOR_SIDO=="ì¸ì²œ")
+d05<-subset(mdis_dat,KOR_SIDO=="ê´‘ì£¼");d06<-subset(mdis_dat,KOR_SIDO=="ëŒ€ì „")
+d07<-subset(mdis_dat,KOR_SIDO=="ìš¸ì‚°");d08<-subset(mdis_dat,KOR_SIDO=="ì„¸ì¢…")
+d09<-subset(mdis_dat,KOR_SIDO=="ê²½ê¸°");d10<-subset(mdis_dat,KOR_SIDO=="ê°•ì›")
+d11<-subset(mdis_dat,KOR_SIDO=="ì¶©ë¶");d12<-subset(mdis_dat,KOR_SIDO=="ì¶©ë‚¨")
+d13<-subset(mdis_dat,KOR_SIDO=="ì „ë¶");d14<-subset(mdis_dat,KOR_SIDO=="ì „ë‚¨")
+d15<-subset(mdis_dat,KOR_SIDO=="ê²½ë¶");d16<-subset(mdis_dat,KOR_SIDO=="ê²½ë‚¨")
+d17<-subset(mdis_dat,KOR_SIDO=="ì œì£¼")
+
+#ë„ì‹œë³„ ì—°êµ¬ê¸°ê°„ë³„ ì˜¨ë„ ë¶„ìœ„ìˆ˜ (6~9ì›”)
+warm_maxT_tb<-rbind(quantile(mdis_s01$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s02$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                    quantile(mdis_s03$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s04$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                    quantile(mdis_s05$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s06$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                    quantile(mdis_s07$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s08$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                    quantile(mdis_s09$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s10$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                    quantile(mdis_s11$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s12$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                    quantile(mdis_s13$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s14$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                    quantile(mdis_s15$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s16$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                    quantile(mdis_s17$maxT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T)) %>% as.data.frame
+
+warm_maxAT_tb<-rbind(quantile(mdis_s01$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s02$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                     quantile(mdis_s03$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s04$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                     quantile(mdis_s05$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s06$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                     quantile(mdis_s07$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s08$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                     quantile(mdis_s09$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s10$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                     quantile(mdis_s11$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s12$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                     quantile(mdis_s13$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s14$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                     quantile(mdis_s15$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),quantile(mdis_s16$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+                     quantile(mdis_s17$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T)) %>% as.data.frame
+
+
+write.csv(warm_maxT_tb ,file="warm_maxT_tb.csv" ,row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(warm_maxAT_tb,file="warm_maxAT_tb.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+#ë„ì‹œë³„, ë…¸ì¶œ ìš”ì•½ 
+z1<-do.call(rbind,psych::describeBy(mdis_dat2$maxtemp ,mdis_dat2$area));z1$exposure="maxT"
+z2<-do.call(rbind,psych::describeBy(mdis_dat2$maxAT   ,mdis_dat2$area));z2$exposure="maxAT"
+z3<-do.call(rbind,psych::describeBy(mdis_dat2$HI_c    ,mdis_dat2$area));z3$exposure="HI"
+z4<-do.call(rbind,psych::describeBy(mdis_dat2$DT      ,mdis_dat2$area));z4$exposure="DT"
+z5<-do.call(rbind,psych::describeBy(mdis_dat2$temp_SD ,mdis_dat2$area));z5$exposure="temp_SD"
+z6<-do.call(rbind,psych::describeBy(mdis_dat2$meanhumi,mdis_dat2$area));z6$exposure="meanhumi"
+z7<-do.call(rbind,psych::describeBy(mdis_dat2$meandew ,mdis_dat2$area));z7$exposure="meandew"
+
+zz<-rbind(z1,z2,z3,z4,z5,z6,z7)
+write.csv(zz,file="zz.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+
+#ì „ì²´, ë…¸ì¶œ ìš”ì•½ 
+t1<-aggregate(maxtemp ~ddate  ,data=mdis_dat2,mean,na.rm=T)
+t2<-aggregate(maxAT   ~ddate  ,data=mdis_dat2,mean,na.rm=T)
+t3<-aggregate(HI_c    ~ddate  ,data=mdis_dat2,mean,na.rm=T)
+t4<-aggregate(DT      ~ddate  ,data=mdis_dat2,mean,na.rm=T)
+t5<-aggregate(temp_SD ~ddate  ,data=mdis_dat2,mean,na.rm=T)
+t6<-aggregate(meanhumi~ddate  ,data=mdis_dat2,mean,na.rm=T)
+t7<-aggregate(meandew ~ddate  ,data=mdis_dat2,mean,na.rm=T)
+
+z1<-as.data.frame(psych::describe(t1$maxtemp)) ;z1$exposure="maxT"
+z2<-as.data.frame(psych::describe(t2$maxAT))   ;z2$exposure="maxAT"
+z3<-as.data.frame(psych::describe(t3$HI_c))    ;z3$exposure="HI_c"
+z4<-as.data.frame(psych::describe(t4$DT))      ;z4$exposure="DT"
+z5<-as.data.frame(psych::describe(t5$temp_SD)) ;z5$exposure="temp_SD"
+z6<-as.data.frame(psych::describe(t6$meanhumi));z6$exposure="meanhumi"
+z7<-as.data.frame(psych::describe(t7$meandew)) ;z7$exposure="meandew"
+
+zz<-rbind(z1,z2,z3,z4,z5,z6,z7)
+write.csv(zz,file="zz.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+zz<-rbind(quantile(t1$maxtemp,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T),
+          quantile(t2$maxAT,p=c(0.70,0.75,0.80,0.85,0.90,seq(0.75,0.99,0.01)),na.rm=T))
+write.csv(zz,file="zz.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+#------------------------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------------------------#
+#exposure-resonse curve
+head(mdis_dat)
+cor(mdis_s01 %>% dplyr::select(nonacc,maxAT,maxtemp,meandew,meanhumi,meanprec,meanwindsp,meanatp,totsun,DT,temp_SD,
+                               HI_c,TN),use="complete.obs")
+
+#------------------------------------------------------------------------------------------------#
+#gam plot
+fit.s01<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s01,family="poisson")
+fit.s02<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s02,family="poisson")
+fit.s03<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s03,family="poisson")
+fit.s04<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s04,family="poisson")
+fit.s05<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s05,family="poisson")
+fit.s06<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s06,family="poisson")
+fit.s07<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s07,family="poisson")
+fit.s08<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s08,family="poisson")
+fit.s09<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s09,family="poisson")
+fit.s10<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s10,family="poisson")
+fit.s11<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s11,family="poisson")
+fit.s12<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s12,family="poisson")
+fit.s13<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s13,family="poisson")
+fit.s14<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s14,family="poisson")
+fit.s15<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s15,family="poisson")
+fit.s16<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s16,family="poisson")
+fit.s17<-gam(nonacc~s(maxAT_s2)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s17,family="poisson")
+
+
+fit.s01<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s01,family="poisson")
+fit.s02<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s02,family="poisson")
+fit.s03<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s03,family="poisson")
+fit.s04<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s04,family="poisson")
+fit.s05<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s05,family="poisson")
+fit.s06<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s06,family="poisson")
+fit.s07<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s07,family="poisson")
+fit.s08<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s08,family="poisson")
+fit.s09<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s09,family="poisson")
+fit.s10<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s10,family="poisson")
+fit.s11<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s11,family="poisson")
+fit.s12<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s12,family="poisson")
+fit.s13<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s13,family="poisson")
+fit.s14<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s14,family="poisson")
+fit.s15<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s15,family="poisson")
+fit.s16<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s16,family="poisson")
+fit.s17<-gam(nonacc~s(HI_c)+s(as.numeric(ddate),k=6*6)+s(meanhumi)+dow,data=mdis_s17,family="poisson")
+
+x11();par(mfrow=c(4,4))
+plot(fit.s01,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="Seoul")
+plot(fit.s02,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="Busan")
+plot(fit.s03,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="Daegu")
+plot(fit.s04,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="Incheon")
+plot(fit.s05,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="Gwangju")
+plot(fit.s06,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="Daejeon")
+plot(fit.s07,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="Ulsan")
+plot(fit.s09,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="KK")
+plot(fit.s10,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="KW")
+plot(fit.s11,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="JB")
+plot(fit.s12,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="JN")
+plot(fit.s13,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="CB")
+plot(fit.s14,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="CN")
+plot(fit.s15,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="KB")
+plot(fit.s16,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="KN")
+plot(fit.s17,select=1,shade = T,cex.lab=1.4,cex.axis=1.4,cex.main=2,main="JJ")
+
+#------------------------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------------------------#
+#ì‹œë„ë³„ Time-series, maxAT (ì¼ìµœê³ ì²´ê°ê¸°ì˜¨)
+
+mdis_s01$mon_year=substr(mdis_s01$ddate,1,7);mdis_s02$mon_year=substr(mdis_s02$ddate,1,7)
+mdis_s03$mon_year=substr(mdis_s03$ddate,1,7);mdis_s04$mon_year=substr(mdis_s04$ddate,1,7)
+mdis_s05$mon_year=substr(mdis_s05$ddate,1,7);mdis_s06$mon_year=substr(mdis_s06$ddate,1,7)
+mdis_s07$mon_year=substr(mdis_s07$ddate,1,7);mdis_s08$mon_year=substr(mdis_s08$ddate,1,7)
+mdis_s09$mon_year=substr(mdis_s09$ddate,1,7);mdis_s10$mon_year=substr(mdis_s10$ddate,1,7)
+mdis_s11$mon_year=substr(mdis_s11$ddate,1,7);mdis_s12$mon_year=substr(mdis_s12$ddate,1,7)
+mdis_s13$mon_year=substr(mdis_s13$ddate,1,7);mdis_s14$mon_year=substr(mdis_s14$ddate,1,7)
+mdis_s15$mon_year=substr(mdis_s15$ddate,1,7);mdis_s16$mon_year=substr(mdis_s16$ddate,1,7)
+mdis_s17$mon_year=substr(mdis_s17$ddate,1,7)
+
+datalist=NULL
+datalist[[1]] <-mdis_s01;datalist[[2]] <-mdis_s02;datalist[[3]] <-mdis_s03;datalist[[4]] <-mdis_s04
+datalist[[5]] <-mdis_s05;datalist[[6]] <-mdis_s06;datalist[[7]] <-mdis_s07;datalist[[8]] <-mdis_s08
+datalist[[9]] <-mdis_s09;datalist[[10]]<-mdis_s10;datalist[[11]]<-mdis_s11;datalist[[12]]<-mdis_s12
+datalist[[13]]<-mdis_s13;datalist[[14]]<-mdis_s14;datalist[[15]]<-mdis_s15;datalist[[16]]<-mdis_s16;datalist[[17]]<-mdis_s17
+
+#single lag, Modeling function
+mod_s<-function(data,lab){
+  d<-data
+  d1<-d[,grep(lab,names(d))]
+  d2<-d %>% dplyr:: select(ddate:area,nonacc,meanhumi_s0:meanhumi_s7,meanhumi_m1:meanhumi_m7,meandew_s0:meandew_s7,meandew_m1:meandew_m7)
+  dd<-cbind(d1,d2)
+  
+  exposure<-names(dd[1:8]);names(dd)[1:8]=paste0("X0",1:8-1)
+  
+  f1<-gam(nonacc~X00+s(as.numeric(ddate),k=4*6)+s(meanhumi_s0)+dow,data=dd,family="quasipoisson")
+  f2<-gam(nonacc~X01+s(as.numeric(ddate),k=4*6)+s(meanhumi_s1)+dow,data=dd,family="quasipoisson")
+  f3<-gam(nonacc~X02+s(as.numeric(ddate),k=4*6)+s(meanhumi_s2)+dow,data=dd,family="quasipoisson")
+  f4<-gam(nonacc~X03+s(as.numeric(ddate),k=4*6)+s(meanhumi_s3)+dow,data=dd,family="quasipoisson")
+  f5<-gam(nonacc~X04+s(as.numeric(ddate),k=4*6)+s(meanhumi_s4)+dow,data=dd,family="quasipoisson")
+  f6<-gam(nonacc~X05+s(as.numeric(ddate),k=4*6)+s(meanhumi_s5)+dow,data=dd,family="quasipoisson")
+  f7<-gam(nonacc~X06+s(as.numeric(ddate),k=4*6)+s(meanhumi_s6)+dow,data=dd,family="quasipoisson")
+  f8<-gam(nonacc~X07+s(as.numeric(ddate),k=4*6)+s(meanhumi_s7)+dow,data=dd,family="quasipoisson")
+  
+  res<-as.data.frame(rbind(cbind(t(summary(f1)$p.table[2,]),GCV=f1$gcv.ubre,deviance=f1$deviance),
+                           cbind(t(summary(f2)$p.table[2,]),GCV=f2$gcv.ubre,deviance=f2$deviance),
+                           cbind(t(summary(f3)$p.table[2,]),GCV=f3$gcv.ubre,deviance=f3$deviance),
+                           cbind(t(summary(f4)$p.table[2,]),GCV=f4$gcv.ubre,deviance=f4$deviance),
+                           cbind(t(summary(f5)$p.table[2,]),GCV=f5$gcv.ubre,deviance=f5$deviance),
+                           cbind(t(summary(f6)$p.table[2,]),GCV=f6$gcv.ubre,deviance=f6$deviance),
+                           cbind(t(summary(f7)$p.table[2,]),GCV=f7$gcv.ubre,deviance=f7$deviance),
+                           cbind(t(summary(f8)$p.table[2,]),GCV=f8$gcv.ubre,deviance=f8$deviance)))
+  
+  row.names(res)=NULL                    
+  
+  res$lag  =paste0("lag",1:8-1)
+  res$gubun="single"
+  res$exposure=exposure
+  res$city    =unique(datalist[[i]]$KOR_SIDO)
+  names(res)[2:4]=c("SE","t","Pval")
+  res
 }
 
-sido.gam.func(tt01,"µµ½Ãº°¿Â¿­ÁúÈ¯°ü·Ã",-1.0,1.0)
-sido.gam.func(tt03,"µµ½Ãº°¿­¼º°æ·Ã",-1.0,1.0)
-sido.gam.func(tt04,"µµ½Ãº°¼öÁ·±¸º´",-1.0,1.0)
-sido.gam.func(tt12,"µµ½Ãº°¾ÆÅäÇÇÇÇºÎ¿°",-2.5,2.5)
-sido.gam.func(tt17,"µµ½Ãº°ÁßÀÌ¿°",-1.0,1.0)
-sido.gam.func(tt15,"µµ½Ãº°°¡¿Í»çÅ°",-1.5,1.5)
-sido.gam.func(tt18,"µµ½Ãº°ÀüÃ¼Àå°¨¿°ÁúÈ¯",-0.5,0.5)
-sido.gam.func(tt20,"µµ½Ãº°Ä¯ÇÊ·Î¹ÚÅÍÀå°¨¿°",-3.0,3.0)
-sido.gam.func(tt05,"µµ½Ãº°ÀüÃ¼È£Èí±â",-0.3,0.3)
-sido.gam.func(tt11,"µµ½Ãº°Æó·Å",-0.3,0.3)
-sido.gam.func(tt10,"µµ½Ãº°Ãµ½Ä",-0.4,0.4)
-sido.gam.func(tt08,"µµ½Ãº°»ó±âµµ°¨¿°",-0.3,0.3)
-sido.gam.func(tt09,"µµ½Ãº°±Ş¼ºÇÏ±âµµ°¨¿°",-0.3,0.3)
-sido.gam.func(tt06,"µµ½Ãº°±â°üÁö¿°",-0.3,0.3)
-sido.gam.func(tt07,"µµ½Ãº°±Ş¼º¼¼±â°üÁö¿°",-0.3,0.3)
-
-#--------------------------------------------------------------------------#
-#--------------------------------------------------------------------------#
-#³»¿ë ¼öÁ¤Á» ÇÏ±â 
-##GAMM,¸ğµ¨¸µ, ´ÜÀÏ Áö¿¬; ¿Â¿­ÁúÈ¯ °ü·Ã
-tt01.res=NULL
-tt01.res$fit0<-gamm(outcome~maxtemp_lag0+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit1<-gamm(outcome~maxtemp_lag1+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit2<-gamm(outcome~maxtemp_lag2+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit3<-gamm(outcome~maxtemp_lag3+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit4<-gamm(outcome~maxtemp_lag4+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit5<-gamm(outcome~maxtemp_lag5+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit6<-gamm(outcome~maxtemp_lag6+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit7<-gamm(outcome~maxtemp_lag7+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,¸ğµ¨¸µ, ÀÌµ¿Æò±Õ; ¿Â¿­ÁúÈ¯ °ü·Ã
-tt01.res$fit01<-gamm(outcome~maxtemp_lag01+s(time,k=2*5)+s(meanhumi_lag01)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit02<-gamm(outcome~maxtemp_lag02+s(time,k=2*5)+s(meanhumi_lag02)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit03<-gamm(outcome~maxtemp_lag03+s(time,k=2*5)+s(meanhumi_lag03)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit04<-gamm(outcome~maxtemp_lag04+s(time,k=2*5)+s(meanhumi_lag04)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit05<-gamm(outcome~maxtemp_lag05+s(time,k=2*5)+s(meanhumi_lag05)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit06<-gamm(outcome~maxtemp_lag06+s(time,k=2*5)+s(meanhumi_lag06)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$fit07<-gamm(outcome~maxtemp_lag07+s(time,k=2*5)+s(meanhumi_lag07)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,¸ğµ¨¸µ, Æø¿° 28µµ
-tt01.res$heat28_0<-gamm(outcome~heat28_lag0+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat28_1<-gamm(outcome~heat28_lag1+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt01,family="quasipoisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat28_2<-gamm(outcome~heat28_lag2+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat28_3<-gamm(outcome~heat28_lag3+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat28_4<-gamm(outcome~heat28_lag4+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat28_5<-gamm(outcome~heat28_lag5+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat28_6<-gamm(outcome~heat28_lag6+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat28_7<-gamm(outcome~heat28_lag7+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,¸ğµ¨¸µ, Æø¿° 29µµ
-tt01.res$heat29_0<-gamm(outcome~heat29_lag0+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat29_1<-gamm(outcome~heat29_lag1+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat29_2<-gamm(outcome~heat29_lag2+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat29_3<-gamm(outcome~heat29_lag3+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat29_4<-gamm(outcome~heat29_lag4+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat29_5<-gamm(outcome~heat29_lag5+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat29_6<-gamm(outcome~heat29_lag6+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat29_7<-gamm(outcome~heat29_lag7+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,¸ğµ¨¸µ, Æø¿° 30µµ
-tt01.res$heat30_0<-gamm(outcome~heat30_lag0+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat30_1<-gamm(outcome~heat30_lag1+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat30_2<-gamm(outcome~heat30_lag2+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat30_3<-gamm(outcome~heat30_lag3+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat30_4<-gamm(outcome~heat30_lag4+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat30_5<-gamm(outcome~heat30_lag5+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat30_6<-gamm(outcome~heat30_lag6+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat30_7<-gamm(outcome~heat30_lag7+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,¸ğµ¨¸µ, Æø¿° 31µµ
-tt01.res$heat31_0<-gamm(outcome~heat31_lag0+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat31_1<-gamm(outcome~heat31_lag1+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat31_2<-gamm(outcome~heat31_lag2+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat31_3<-gamm(outcome~heat31_lag3+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat31_4<-gamm(outcome~heat31_lag4+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat31_5<-gamm(outcome~heat31_lag5+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat31_6<-gamm(outcome~heat31_lag6+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat31_7<-gamm(outcome~heat31_lag7+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,¸ğµ¨¸µ, Æø¿° 32µµ
-tt01.res$heat32_0<-gamm(outcome~heat32_lag0+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat32_1<-gamm(outcome~heat32_lag1+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat32_2<-gamm(outcome~heat32_lag2+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat32_3<-gamm(outcome~heat32_lag3+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat32_4<-gamm(outcome~heat32_lag4+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat32_5<-gamm(outcome~heat32_lag5+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat32_6<-gamm(outcome~heat32_lag6+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat32_7<-gamm(outcome~heat32_lag7+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-##GAMM,¸ğµ¨¸µ, Æø¿° 33µµ
-tt01.res$heat33_0<-gamm(outcome~heat33_lag0+s(time,k=2*5)+s(meanhumi_lag0)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat33_1<-gamm(outcome~heat33_lag1+s(time,k=2*5)+s(meanhumi_lag1)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat33_2<-gamm(outcome~heat33_lag2+s(time,k=2*5)+s(meanhumi_lag2)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat33_3<-gamm(outcome~heat33_lag3+s(time,k=2*5)+s(meanhumi_lag3)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat33_4<-gamm(outcome~heat33_lag4+s(time,k=2*5)+s(meanhumi_lag4)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat33_5<-gamm(outcome~heat33_lag5+s(time,k=2*5)+s(meanhumi_lag5)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat33_6<-gamm(outcome~heat33_lag6+s(time,k=2*5)+s(meanhumi_lag6)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-tt01.res$heat33_7<-gamm(outcome~heat33_lag7+s(time,k=2*5)+s(meanhumi_lag7)+dow,random=list(area=~1),data=tt01,family="poisson",control=lmeControl(opt="optim",msMaxIter=10000))
-
-tt01.single<-as.data.frame(rbind(summary(tt01.res$fit0$gam)$p.table[2,],summary(tt01.res$fit1$gam)$p.table[2,],
-                                 summary(tt01.res$fit2$gam)$p.table[2,],summary(tt01.res$fit3$gam)$p.table[2,],
-                                 summary(tt01.res$fit4$gam)$p.table[2,],summary(tt01.res$fit5$gam)$p.table[2,],
-                                 summary(tt01.res$fit6$gam)$p.table[2,],summary(tt01.res$fit7$gam)$p.table[2,]))
-
-tt01.moving<-as.data.frame(rbind(summary(tt01.res$fit01$gam)$p.table[2,],
-                                 summary(tt01.res$fit02$gam)$p.table[2,],summary(tt01.res$fit03$gam)$p.table[2,],
-                                 summary(tt01.res$fit04$gam)$p.table[2,],summary(tt01.res$fit05$gam)$p.table[2,],
-                                 summary(tt01.res$fit06$gam)$p.table[2,],summary(tt01.res$fit07$gam)$p.table[2,]))
-
-tt01.heat28<-as.data.frame(rbind(summary(tt01.res$heat28_0$gam)$p.table[2,],summary(tt01.res$heat28_1$gam)$p.table[2,],
-                                 summary(tt01.res$heat28_2$gam)$p.table[2,],summary(tt01.res$heat28_3$gam)$p.table[2,],
-                                 summary(tt01.res$heat28_4$gam)$p.table[2,],summary(tt01.res$heat28_5$gam)$p.table[2,],
-                                 summary(tt01.res$heat28_6$gam)$p.table[2,],summary(tt01.res$heat28_7$gam)$p.table[2,]))
-
-tt01.heat29<-as.data.frame(rbind(summary(tt01.res$heat29_0$gam)$p.table[2,],summary(tt01.res$heat29_1$gam)$p.table[2,],
-                                 summary(tt01.res$heat29_2$gam)$p.table[2,],summary(tt01.res$heat29_3$gam)$p.table[2,],
-                                 summary(tt01.res$heat29_4$gam)$p.table[2,],summary(tt01.res$heat29_5$gam)$p.table[2,],
-                                 summary(tt01.res$heat29_6$gam)$p.table[2,],summary(tt01.res$heat29_7$gam)$p.table[2,]))
-
-tt01.heat30<-as.data.frame(rbind(summary(tt01.res$heat30_0$gam)$p.table[2,],summary(tt01.res$heat30_1$gam)$p.table[2,],
-                                 summary(tt01.res$heat30_2$gam)$p.table[2,],summary(tt01.res$heat30_3$gam)$p.table[2,],
-                                 summary(tt01.res$heat30_4$gam)$p.table[2,],summary(tt01.res$heat30_5$gam)$p.table[2,],
-                                 summary(tt01.res$heat30_6$gam)$p.table[2,],summary(tt01.res$heat30_7$gam)$p.table[2,]))
-
-tt01.heat31<-as.data.frame(rbind(summary(tt01.res$heat31_0$gam)$p.table[2,],summary(tt01.res$heat31_1$gam)$p.table[2,],
-                                 summary(tt01.res$heat31_2$gam)$p.table[2,],summary(tt01.res$heat31_3$gam)$p.table[2,],
-                                 summary(tt01.res$heat31_4$gam)$p.table[2,],summary(tt01.res$heat31_5$gam)$p.table[2,],
-                                 summary(tt01.res$heat31_6$gam)$p.table[2,],summary(tt01.res$heat31_7$gam)$p.table[2,]))
-
-tt01.heat32<-as.data.frame(rbind(summary(tt01.res$heat32_0$gam)$p.table[2,],summary(tt01.res$heat32_1$gam)$p.table[2,],
-                                 summary(tt01.res$heat32_2$gam)$p.table[2,],summary(tt01.res$heat32_3$gam)$p.table[2,],
-                                 summary(tt01.res$heat32_4$gam)$p.table[2,],summary(tt01.res$heat32_5$gam)$p.table[2,],
-                                 summary(tt01.res$heat32_6$gam)$p.table[2,],summary(tt01.res$heat32_7$gam)$p.table[2,]))
-
-tt01.heat33<-as.data.frame(rbind(summary(tt01.res$heat33_0$gam)$p.table[2,],summary(tt01.res$heat33_1$gam)$p.table[2,],
-                                 summary(tt01.res$heat33_2$gam)$p.table[2,],summary(tt01.res$heat33_3$gam)$p.table[2,],
-                                 summary(tt01.res$heat33_4$gam)$p.table[2,],summary(tt01.res$heat33_5$gam)$p.table[2,],
-                                 summary(tt01.res$heat33_6$gam)$p.table[2,],summary(tt01.res$heat33_7$gam)$p.table[2,]))
-
-
-tt01.single$label="single";tt01.single$lag=paste0("lag" ,1:8-1)
-tt01.moving$label="moving";tt01.moving$lag=paste0("lag0",1:7)
-
-tt01.heat28$label="single";tt01.heat28$lag=paste0("lag" ,1:8-1)
-tt01.heat29$label="single";tt01.heat29$lag=paste0("lag" ,1:8-1)
-tt01.heat30$label="single";tt01.heat30$lag=paste0("lag" ,1:8-1)
-tt01.heat31$label="single";tt01.heat31$lag=paste0("lag" ,1:8-1)
-tt01.heat32$label="single";tt01.heat32$lag=paste0("lag" ,1:8-1)
-tt01.heat33$label="single";tt01.heat33$lag=paste0("lag" ,1:8-1)
-
-tt01.single$exposure="maxT"
-tt01.moving$exposure="maxT"
-tt01.heat28$exposure="heat28"
-tt01.heat29$exposure="heat29"
-tt01.heat30$exposure="heat30"
-tt01.heat31$exposure="heat31"
-tt01.heat32$exposure="heat32"
-tt01.heat33$exposure="heat33"
-
-#--------------------------------------------------------------------------#
-#--------------------------------------------------------------------------#
-
-#First stage, ½Ãµµº° ºĞ¼®
-#ÁúÈ¯º°·Î µµ½Ãº° ³ëÃâ-¹İÀÀ ±×¸² ±×¸®±â 
-
-sido.gam<-function(dataset,SIDO){
+#moving average, Modeling function
+mod_m<-function(data,lab){
+  d<-data
   
-  dd<-dataset %>% filter(area==SIDO)
+  d1<-d[,grep(lab,names(d))]
+  d2<-d %>% dplyr:: select(ddate:area,nonacc,meanhumi_s0:meanhumi_s7,meanhumi_m1:meanhumi_m7,meandew_s0:meandew_s7,meandew_m1:meandew_m7)
+  dd<-cbind(d1,d2)
   
-  #ÀÏ ÃÖ°í±â¿Â ´ÜÀÏÁö¿¬
-  fit_lag0<-gam(outcome~maxtemp_lag0+pm25_lag0+s(time,k=2*5)+s(meanhumi_lag0)+s(windspeed_lag0)+dow,data=dd,family="quasipoisson")
-  fit_lag1<-gam(outcome~maxtemp_lag1+pm25_lag1+s(time,k=2*5)+s(meanhumi_lag1)+s(windspeed_lag1)+dow,data=dd,family="quasipoisson")
-  fit_lag2<-gam(outcome~maxtemp_lag2+pm25_lag2+s(time,k=2*5)+s(meanhumi_lag2)+s(windspeed_lag2)+dow,data=dd,family="quasipoisson")
-  fit_lag3<-gam(outcome~maxtemp_lag3+pm25_lag3+s(time,k=2*5)+s(meanhumi_lag3)+s(windspeed_lag3)+dow,data=dd,family="quasipoisson")
-  fit_lag4<-gam(outcome~maxtemp_lag4+pm25_lag4+s(time,k=2*5)+s(meanhumi_lag4)+s(windspeed_lag4)+dow,data=dd,family="quasipoisson")
-  fit_lag5<-gam(outcome~maxtemp_lag5+pm25_lag5+s(time,k=2*5)+s(meanhumi_lag5)+s(windspeed_lag5)+dow,data=dd,family="quasipoisson")
-  fit_lag6<-gam(outcome~maxtemp_lag6+pm25_lag6+s(time,k=2*5)+s(meanhumi_lag6)+s(windspeed_lag6)+dow,data=dd,family="quasipoisson")
-  fit_lag7<-gam(outcome~maxtemp_lag7+pm25_lag7+s(time,k=2*5)+s(meanhumi_lag7)+s(windspeed_lag7)+dow,data=dd,family="quasipoisson")
+  exposure<-names(dd[1:7]);names(dd)[1:7]=paste0("X",1:7)
   
-  #ÀÏ ÃÖ°í±â¿Â ÀÌµ¿Æò±Õ 
-  fit_lag01<-gam(outcome~maxtemp_lag01+pm25_lag01+s(time,k=2*5)+s(meanhumi_lag01)+s(windspeed_lag01)+dow,data=dd,family="quasipoisson")
-  fit_lag02<-gam(outcome~maxtemp_lag02+pm25_lag02+s(time,k=2*5)+s(meanhumi_lag02)+s(windspeed_lag02)+dow,data=dd,family="quasipoisson")
-  fit_lag03<-gam(outcome~maxtemp_lag03+pm25_lag03+s(time,k=2*5)+s(meanhumi_lag03)+s(windspeed_lag03)+dow,data=dd,family="quasipoisson")
-  fit_lag04<-gam(outcome~maxtemp_lag04+pm25_lag04+s(time,k=2*5)+s(meanhumi_lag04)+s(windspeed_lag04)+dow,data=dd,family="quasipoisson")
-  fit_lag05<-gam(outcome~maxtemp_lag05+pm25_lag05+s(time,k=2*5)+s(meanhumi_lag05)+s(windspeed_lag05)+dow,data=dd,family="quasipoisson")
-  fit_lag06<-gam(outcome~maxtemp_lag06+pm25_lag06+s(time,k=2*5)+s(meanhumi_lag06)+s(windspeed_lag06)+dow,data=dd,family="quasipoisson")
-  fit_lag07<-gam(outcome~maxtemp_lag07+pm25_lag07+s(time,k=2*5)+s(meanhumi_lag07)+s(windspeed_lag07)+dow,data=dd,family="quasipoisson")
+  f1<-gam(nonacc~X1+s(as.numeric(ddate),k=4*6)+s(meanhumi_m1)+dow,data=dd,family="quasipoisson")
+  f2<-gam(nonacc~X2+s(as.numeric(ddate),k=4*6)+s(meanhumi_m2)+dow,data=dd,family="quasipoisson")
+  f3<-gam(nonacc~X3+s(as.numeric(ddate),k=4*6)+s(meanhumi_m3)+dow,data=dd,family="quasipoisson")
+  f4<-gam(nonacc~X4+s(as.numeric(ddate),k=4*6)+s(meanhumi_m4)+dow,data=dd,family="quasipoisson")
+  f5<-gam(nonacc~X5+s(as.numeric(ddate),k=4*6)+s(meanhumi_m5)+dow,data=dd,family="quasipoisson")
+  f6<-gam(nonacc~X6+s(as.numeric(ddate),k=4*6)+s(meanhumi_m6)+dow,data=dd,family="quasipoisson")
+  f7<-gam(nonacc~X7+s(as.numeric(ddate),k=4*6)+s(meanhumi_m7)+dow,data=dd,family="quasipoisson")
   
-  #Æø¿° 28µµ ´ÜÀÏÁö¿¬
-  heat28_lag0<-gam(outcome~heat28_lag0+pm25_lag0+s(time,k=2*5)+s(meanhumi_lag0)+s(windspeed_lag0)+dow,data=dd,family="quasipoisson")
-  heat28_lag1<-gam(outcome~heat28_lag1+pm25_lag1+s(time,k=2*5)+s(meanhumi_lag1)+s(windspeed_lag1)+dow,data=dd,family="quasipoisson")
-  heat28_lag2<-gam(outcome~heat28_lag2+pm25_lag2+s(time,k=2*5)+s(meanhumi_lag2)+s(windspeed_lag2)+dow,data=dd,family="quasipoisson")
-  heat28_lag3<-gam(outcome~heat28_lag3+pm25_lag3+s(time,k=2*5)+s(meanhumi_lag3)+s(windspeed_lag3)+dow,data=dd,family="quasipoisson")
-  heat28_lag4<-gam(outcome~heat28_lag4+pm25_lag4+s(time,k=2*5)+s(meanhumi_lag4)+s(windspeed_lag4)+dow,data=dd,family="quasipoisson")
-  heat28_lag5<-gam(outcome~heat28_lag5+pm25_lag5+s(time,k=2*5)+s(meanhumi_lag5)+s(windspeed_lag5)+dow,data=dd,family="quasipoisson")
-  heat28_lag6<-gam(outcome~heat28_lag6+pm25_lag6+s(time,k=2*5)+s(meanhumi_lag6)+s(windspeed_lag6)+dow,data=dd,family="quasipoisson")
-  heat28_lag7<-gam(outcome~heat28_lag7+pm25_lag7+s(time,k=2*5)+s(meanhumi_lag7)+s(windspeed_lag7)+dow,data=dd,family="quasipoisson")
+  res<-as.data.frame(rbind(cbind(t(summary(f1)$p.table[2,]),GCV=f1$gcv.ubre,deviance=f1$deviance),
+                           cbind(t(summary(f2)$p.table[2,]),GCV=f2$gcv.ubre,deviance=f2$deviance),
+                           cbind(t(summary(f3)$p.table[2,]),GCV=f3$gcv.ubre,deviance=f3$deviance),
+                           cbind(t(summary(f4)$p.table[2,]),GCV=f4$gcv.ubre,deviance=f4$deviance),
+                           cbind(t(summary(f5)$p.table[2,]),GCV=f5$gcv.ubre,deviance=f5$deviance),
+                           cbind(t(summary(f6)$p.table[2,]),GCV=f6$gcv.ubre,deviance=f6$deviance),
+                           cbind(t(summary(f7)$p.table[2,]),GCV=f7$gcv.ubre,deviance=f7$deviance)))
   
-  #Æø¿° 29µµ ´ÜÀÏÁö¿¬
-  heat29_lag0<-gam(outcome~heat29_lag0+pm25_lag0+s(time,k=2*5)+s(meanhumi_lag0)+s(windspeed_lag0)+dow,data=dd,family="quasipoisson")
-  heat29_lag1<-gam(outcome~heat29_lag1+pm25_lag1+s(time,k=2*5)+s(meanhumi_lag1)+s(windspeed_lag1)+dow,data=dd,family="quasipoisson")
-  heat29_lag2<-gam(outcome~heat29_lag2+pm25_lag2+s(time,k=2*5)+s(meanhumi_lag2)+s(windspeed_lag2)+dow,data=dd,family="quasipoisson")
-  heat29_lag3<-gam(outcome~heat29_lag3+pm25_lag3+s(time,k=2*5)+s(meanhumi_lag3)+s(windspeed_lag3)+dow,data=dd,family="quasipoisson")
-  heat29_lag4<-gam(outcome~heat29_lag4+pm25_lag4+s(time,k=2*5)+s(meanhumi_lag4)+s(windspeed_lag4)+dow,data=dd,family="quasipoisson")
-  heat29_lag5<-gam(outcome~heat29_lag5+pm25_lag5+s(time,k=2*5)+s(meanhumi_lag5)+s(windspeed_lag5)+dow,data=dd,family="quasipoisson")
-  heat29_lag6<-gam(outcome~heat29_lag6+pm25_lag6+s(time,k=2*5)+s(meanhumi_lag6)+s(windspeed_lag6)+dow,data=dd,family="quasipoisson")
-  heat29_lag7<-gam(outcome~heat29_lag7+pm25_lag7+s(time,k=2*5)+s(meanhumi_lag7)+s(windspeed_lag7)+dow,data=dd,family="quasipoisson")
+  row.names(res)=NULL                    
   
-  #Æø¿° 30µµ ´ÜÀÏÁö¿¬
-  heat30_lag0<-gam(outcome~heat30_lag0+pm25_lag0+s(time,k=2*5)+s(meanhumi_lag0)+s(windspeed_lag0)+dow,data=dd,family="quasipoisson")
-  heat30_lag1<-gam(outcome~heat30_lag1+pm25_lag1+s(time,k=2*5)+s(meanhumi_lag1)+s(windspeed_lag1)+dow,data=dd,family="quasipoisson")
-  heat30_lag2<-gam(outcome~heat30_lag2+pm25_lag2+s(time,k=2*5)+s(meanhumi_lag2)+s(windspeed_lag2)+dow,data=dd,family="quasipoisson")
-  heat30_lag3<-gam(outcome~heat30_lag3+pm25_lag3+s(time,k=2*5)+s(meanhumi_lag3)+s(windspeed_lag3)+dow,data=dd,family="quasipoisson")
-  heat30_lag4<-gam(outcome~heat30_lag4+pm25_lag4+s(time,k=2*5)+s(meanhumi_lag4)+s(windspeed_lag4)+dow,data=dd,family="quasipoisson")
-  heat30_lag5<-gam(outcome~heat30_lag5+pm25_lag5+s(time,k=2*5)+s(meanhumi_lag5)+s(windspeed_lag5)+dow,data=dd,family="quasipoisson")
-  heat30_lag6<-gam(outcome~heat30_lag6+pm25_lag6+s(time,k=2*5)+s(meanhumi_lag6)+s(windspeed_lag6)+dow,data=dd,family="quasipoisson")
-  heat30_lag7<-gam(outcome~heat30_lag7+pm25_lag7+s(time,k=2*5)+s(meanhumi_lag7)+s(windspeed_lag7)+dow,data=dd,family="quasipoisson")
-  
-  #Æø¿° 31µµ ´ÜÀÏÁö¿¬
-  heat31_lag0<-gam(outcome~heat31_lag0+pm25_lag0+s(time,k=2*5)+s(meanhumi_lag0)+s(windspeed_lag0)+dow,data=dd,family="quasipoisson")
-  heat31_lag1<-gam(outcome~heat31_lag1+pm25_lag1+s(time,k=2*5)+s(meanhumi_lag1)+s(windspeed_lag1)+dow,data=dd,family="quasipoisson")
-  heat31_lag2<-gam(outcome~heat31_lag2+pm25_lag2+s(time,k=2*5)+s(meanhumi_lag2)+s(windspeed_lag2)+dow,data=dd,family="quasipoisson")
-  heat31_lag3<-gam(outcome~heat31_lag3+pm25_lag3+s(time,k=2*5)+s(meanhumi_lag3)+s(windspeed_lag3)+dow,data=dd,family="quasipoisson")
-  heat31_lag4<-gam(outcome~heat31_lag4+pm25_lag4+s(time,k=2*5)+s(meanhumi_lag4)+s(windspeed_lag4)+dow,data=dd,family="quasipoisson")
-  heat31_lag5<-gam(outcome~heat31_lag5+pm25_lag5+s(time,k=2*5)+s(meanhumi_lag5)+s(windspeed_lag5)+dow,data=dd,family="quasipoisson")
-  heat31_lag6<-gam(outcome~heat31_lag6+pm25_lag6+s(time,k=2*5)+s(meanhumi_lag6)+s(windspeed_lag6)+dow,data=dd,family="quasipoisson")
-  heat31_lag7<-gam(outcome~heat31_lag7+pm25_lag7+s(time,k=2*5)+s(meanhumi_lag7)+s(windspeed_lag7)+dow,data=dd,family="quasipoisson")
-  
-  #Æø¿° 32µµ ´ÜÀÏÁö¿¬
-  heat32_lag0<-gam(outcome~heat32_lag0+pm25_lag0+s(time,k=2*5)+s(meanhumi_lag0)+s(windspeed_lag0)+dow,data=dd,family="quasipoisson")
-  heat32_lag1<-gam(outcome~heat32_lag1+pm25_lag1+s(time,k=2*5)+s(meanhumi_lag1)+s(windspeed_lag1)+dow,data=dd,family="quasipoisson")
-  heat32_lag2<-gam(outcome~heat32_lag2+pm25_lag2+s(time,k=2*5)+s(meanhumi_lag2)+s(windspeed_lag2)+dow,data=dd,family="quasipoisson")
-  heat32_lag3<-gam(outcome~heat32_lag3+pm25_lag3+s(time,k=2*5)+s(meanhumi_lag3)+s(windspeed_lag3)+dow,data=dd,family="quasipoisson")
-  heat32_lag4<-gam(outcome~heat32_lag4+pm25_lag4+s(time,k=2*5)+s(meanhumi_lag4)+s(windspeed_lag4)+dow,data=dd,family="quasipoisson")
-  heat32_lag5<-gam(outcome~heat32_lag5+pm25_lag5+s(time,k=2*5)+s(meanhumi_lag5)+s(windspeed_lag5)+dow,data=dd,family="quasipoisson")
-  heat32_lag6<-gam(outcome~heat32_lag6+pm25_lag6+s(time,k=2*5)+s(meanhumi_lag6)+s(windspeed_lag6)+dow,data=dd,family="quasipoisson")
-  heat32_lag7<-gam(outcome~heat32_lag7+pm25_lag7+s(time,k=2*5)+s(meanhumi_lag7)+s(windspeed_lag7)+dow,data=dd,family="quasipoisson")
-  
-  #Æø¿° 33µµ ´ÜÀÏÁö¿¬
-  heat33_lag0<-gam(outcome~heat33_lag0+pm25_lag0+s(time,k=2*5)+s(meanhumi_lag0)+s(windspeed_lag0)+dow,data=dd,family="quasipoisson")
-  heat33_lag1<-gam(outcome~heat33_lag1+pm25_lag1+s(time,k=2*5)+s(meanhumi_lag1)+s(windspeed_lag1)+dow,data=dd,family="quasipoisson")
-  heat33_lag2<-gam(outcome~heat33_lag2+pm25_lag2+s(time,k=2*5)+s(meanhumi_lag2)+s(windspeed_lag2)+dow,data=dd,family="quasipoisson")
-  heat33_lag3<-gam(outcome~heat33_lag3+pm25_lag3+s(time,k=2*5)+s(meanhumi_lag3)+s(windspeed_lag3)+dow,data=dd,family="quasipoisson")
-  heat33_lag4<-gam(outcome~heat33_lag4+pm25_lag4+s(time,k=2*5)+s(meanhumi_lag4)+s(windspeed_lag4)+dow,data=dd,family="quasipoisson")
-  heat33_lag5<-gam(outcome~heat33_lag5+pm25_lag5+s(time,k=2*5)+s(meanhumi_lag5)+s(windspeed_lag5)+dow,data=dd,family="quasipoisson")
-  heat33_lag6<-gam(outcome~heat33_lag6+pm25_lag6+s(time,k=2*5)+s(meanhumi_lag6)+s(windspeed_lag6)+dow,data=dd,family="quasipoisson")
-  heat33_lag7<-gam(outcome~heat33_lag7+pm25_lag7+s(time,k=2*5)+s(meanhumi_lag7)+s(windspeed_lag7)+dow,data=dd,family="quasipoisson")
-  
-  
-  #result table
-  fit.tb0<-as.data.frame(cbind(summary(fit_lag0)$p.table[2:3,],gcv=fit_lag0$gcv.ubre,deviance=fit_lag0$deviance,r_sq=summary(fit_lag0)$r.sq))
-  fit.tb1<-as.data.frame(cbind(summary(fit_lag1)$p.table[2:3,],gcv=fit_lag1$gcv.ubre,deviance=fit_lag1$deviance,r_sq=summary(fit_lag1)$r.sq))
-  fit.tb2<-as.data.frame(cbind(summary(fit_lag2)$p.table[2:3,],gcv=fit_lag2$gcv.ubre,deviance=fit_lag2$deviance,r_sq=summary(fit_lag2)$r.sq))
-  fit.tb3<-as.data.frame(cbind(summary(fit_lag3)$p.table[2:3,],gcv=fit_lag3$gcv.ubre,deviance=fit_lag3$deviance,r_sq=summary(fit_lag3)$r.sq))
-  fit.tb4<-as.data.frame(cbind(summary(fit_lag4)$p.table[2:3,],gcv=fit_lag4$gcv.ubre,deviance=fit_lag4$deviance,r_sq=summary(fit_lag4)$r.sq))
-  fit.tb5<-as.data.frame(cbind(summary(fit_lag5)$p.table[2:3,],gcv=fit_lag5$gcv.ubre,deviance=fit_lag5$deviance,r_sq=summary(fit_lag5)$r.sq))
-  fit.tb6<-as.data.frame(cbind(summary(fit_lag6)$p.table[2:3,],gcv=fit_lag6$gcv.ubre,deviance=fit_lag6$deviance,r_sq=summary(fit_lag6)$r.sq))
-  fit.tb7<-as.data.frame(cbind(summary(fit_lag7)$p.table[2:3,],gcv=fit_lag7$gcv.ubre,deviance=fit_lag7$deviance,r_sq=summary(fit_lag7)$r.sq))
-  
-  fit.tb01<-as.data.frame(cbind(summary(fit_lag01)$p.table[2:3,],gcv=fit_lag01$gcv.ubre,deviance=fit_lag01$deviance,r_sq=summary(fit_lag01)$r.sq))
-  fit.tb02<-as.data.frame(cbind(summary(fit_lag02)$p.table[2:3,],gcv=fit_lag02$gcv.ubre,deviance=fit_lag02$deviance,r_sq=summary(fit_lag02)$r.sq))
-  fit.tb03<-as.data.frame(cbind(summary(fit_lag03)$p.table[2:3,],gcv=fit_lag03$gcv.ubre,deviance=fit_lag03$deviance,r_sq=summary(fit_lag03)$r.sq))
-  fit.tb04<-as.data.frame(cbind(summary(fit_lag04)$p.table[2:3,],gcv=fit_lag04$gcv.ubre,deviance=fit_lag04$deviance,r_sq=summary(fit_lag04)$r.sq))
-  fit.tb05<-as.data.frame(cbind(summary(fit_lag05)$p.table[2:3,],gcv=fit_lag05$gcv.ubre,deviance=fit_lag05$deviance,r_sq=summary(fit_lag05)$r.sq))
-  fit.tb06<-as.data.frame(cbind(summary(fit_lag06)$p.table[2:3,],gcv=fit_lag06$gcv.ubre,deviance=fit_lag06$deviance,r_sq=summary(fit_lag06)$r.sq))
-  fit.tb07<-as.data.frame(cbind(summary(fit_lag07)$p.table[2:3,],gcv=fit_lag07$gcv.ubre,deviance=fit_lag07$deviance,r_sq=summary(fit_lag07)$r.sq))
-  
-  heat28.tb0<-as.data.frame(cbind(summary(heat28_lag0)$p.table[2:3,],gcv=heat28_lag0$gcv.ubre,deviance=heat28_lag0$deviance,r_sq=summary(heat28_lag0)$r.sq))
-  heat28.tb1<-as.data.frame(cbind(summary(heat28_lag1)$p.table[2:3,],gcv=heat28_lag1$gcv.ubre,deviance=heat28_lag1$deviance,r_sq=summary(heat28_lag1)$r.sq))
-  heat28.tb2<-as.data.frame(cbind(summary(heat28_lag2)$p.table[2:3,],gcv=heat28_lag2$gcv.ubre,deviance=heat28_lag2$deviance,r_sq=summary(heat28_lag2)$r.sq))
-  heat28.tb3<-as.data.frame(cbind(summary(heat28_lag3)$p.table[2:3,],gcv=heat28_lag3$gcv.ubre,deviance=heat28_lag3$deviance,r_sq=summary(heat28_lag3)$r.sq))
-  heat28.tb4<-as.data.frame(cbind(summary(heat28_lag4)$p.table[2:3,],gcv=heat28_lag4$gcv.ubre,deviance=heat28_lag4$deviance,r_sq=summary(heat28_lag4)$r.sq))
-  heat28.tb5<-as.data.frame(cbind(summary(heat28_lag5)$p.table[2:3,],gcv=heat28_lag5$gcv.ubre,deviance=heat28_lag5$deviance,r_sq=summary(heat28_lag5)$r.sq))
-  heat28.tb6<-as.data.frame(cbind(summary(heat28_lag6)$p.table[2:3,],gcv=heat28_lag6$gcv.ubre,deviance=heat28_lag6$deviance,r_sq=summary(heat28_lag6)$r.sq))
-  heat28.tb7<-as.data.frame(cbind(summary(heat28_lag7)$p.table[2:3,],gcv=heat28_lag7$gcv.ubre,deviance=heat28_lag7$deviance,r_sq=summary(heat28_lag7)$r.sq))
-  
-  heat29.tb0<-as.data.frame(cbind(summary(heat29_lag0)$p.table[2:3,],gcv=heat29_lag0$gcv.ubre,deviance=heat29_lag0$deviance,r_sq=summary(heat29_lag0)$r.sq))
-  heat29.tb1<-as.data.frame(cbind(summary(heat29_lag1)$p.table[2:3,],gcv=heat29_lag1$gcv.ubre,deviance=heat29_lag1$deviance,r_sq=summary(heat29_lag1)$r.sq))
-  heat29.tb2<-as.data.frame(cbind(summary(heat29_lag2)$p.table[2:3,],gcv=heat29_lag2$gcv.ubre,deviance=heat29_lag2$deviance,r_sq=summary(heat29_lag2)$r.sq))
-  heat29.tb3<-as.data.frame(cbind(summary(heat29_lag3)$p.table[2:3,],gcv=heat29_lag3$gcv.ubre,deviance=heat29_lag3$deviance,r_sq=summary(heat29_lag3)$r.sq))
-  heat29.tb4<-as.data.frame(cbind(summary(heat29_lag4)$p.table[2:3,],gcv=heat29_lag4$gcv.ubre,deviance=heat29_lag4$deviance,r_sq=summary(heat29_lag4)$r.sq))
-  heat29.tb5<-as.data.frame(cbind(summary(heat29_lag5)$p.table[2:3,],gcv=heat29_lag5$gcv.ubre,deviance=heat29_lag5$deviance,r_sq=summary(heat29_lag5)$r.sq))
-  heat29.tb6<-as.data.frame(cbind(summary(heat29_lag6)$p.table[2:3,],gcv=heat29_lag6$gcv.ubre,deviance=heat29_lag6$deviance,r_sq=summary(heat29_lag6)$r.sq))
-  heat29.tb7<-as.data.frame(cbind(summary(heat29_lag7)$p.table[2:3,],gcv=heat29_lag7$gcv.ubre,deviance=heat29_lag7$deviance,r_sq=summary(heat29_lag7)$r.sq))
-  
-  heat30.tb0<-as.data.frame(cbind(summary(heat30_lag0)$p.table[2:3,],gcv=heat30_lag0$gcv.ubre,deviance=heat30_lag0$deviance,r_sq=summary(heat30_lag0)$r.sq))
-  heat30.tb1<-as.data.frame(cbind(summary(heat30_lag1)$p.table[2:3,],gcv=heat30_lag1$gcv.ubre,deviance=heat30_lag1$deviance,r_sq=summary(heat30_lag1)$r.sq))
-  heat30.tb2<-as.data.frame(cbind(summary(heat30_lag2)$p.table[2:3,],gcv=heat30_lag2$gcv.ubre,deviance=heat30_lag2$deviance,r_sq=summary(heat30_lag2)$r.sq))
-  heat30.tb3<-as.data.frame(cbind(summary(heat30_lag3)$p.table[2:3,],gcv=heat30_lag3$gcv.ubre,deviance=heat30_lag3$deviance,r_sq=summary(heat30_lag3)$r.sq))
-  heat30.tb4<-as.data.frame(cbind(summary(heat30_lag4)$p.table[2:3,],gcv=heat30_lag4$gcv.ubre,deviance=heat30_lag4$deviance,r_sq=summary(heat30_lag4)$r.sq))
-  heat30.tb5<-as.data.frame(cbind(summary(heat30_lag5)$p.table[2:3,],gcv=heat30_lag5$gcv.ubre,deviance=heat30_lag5$deviance,r_sq=summary(heat30_lag5)$r.sq))
-  heat30.tb6<-as.data.frame(cbind(summary(heat30_lag6)$p.table[2:3,],gcv=heat30_lag6$gcv.ubre,deviance=heat30_lag6$deviance,r_sq=summary(heat30_lag6)$r.sq))
-  heat30.tb7<-as.data.frame(cbind(summary(heat30_lag7)$p.table[2:3,],gcv=heat30_lag7$gcv.ubre,deviance=heat30_lag7$deviance,r_sq=summary(heat30_lag7)$r.sq))
-  
-  heat31.tb0<-as.data.frame(cbind(summary(heat31_lag0)$p.table[2:3,],gcv=heat31_lag0$gcv.ubre,deviance=heat31_lag0$deviance,r_sq=summary(heat31_lag0)$r.sq))
-  heat31.tb1<-as.data.frame(cbind(summary(heat31_lag1)$p.table[2:3,],gcv=heat31_lag1$gcv.ubre,deviance=heat31_lag1$deviance,r_sq=summary(heat31_lag1)$r.sq))
-  heat31.tb2<-as.data.frame(cbind(summary(heat31_lag2)$p.table[2:3,],gcv=heat31_lag2$gcv.ubre,deviance=heat31_lag2$deviance,r_sq=summary(heat31_lag2)$r.sq))
-  heat31.tb3<-as.data.frame(cbind(summary(heat31_lag3)$p.table[2:3,],gcv=heat31_lag3$gcv.ubre,deviance=heat31_lag3$deviance,r_sq=summary(heat31_lag3)$r.sq))
-  heat31.tb4<-as.data.frame(cbind(summary(heat31_lag4)$p.table[2:3,],gcv=heat31_lag4$gcv.ubre,deviance=heat31_lag4$deviance,r_sq=summary(heat31_lag4)$r.sq))
-  heat31.tb5<-as.data.frame(cbind(summary(heat31_lag5)$p.table[2:3,],gcv=heat31_lag5$gcv.ubre,deviance=heat31_lag5$deviance,r_sq=summary(heat31_lag5)$r.sq))
-  heat31.tb6<-as.data.frame(cbind(summary(heat31_lag6)$p.table[2:3,],gcv=heat31_lag6$gcv.ubre,deviance=heat31_lag6$deviance,r_sq=summary(heat31_lag6)$r.sq))
-  heat31.tb7<-as.data.frame(cbind(summary(heat31_lag7)$p.table[2:3,],gcv=heat31_lag7$gcv.ubre,deviance=heat31_lag7$deviance,r_sq=summary(heat31_lag7)$r.sq))
-  
-  heat32.tb0<-as.data.frame(cbind(summary(heat32_lag0)$p.table[2:3,],gcv=heat32_lag0$gcv.ubre,deviance=heat32_lag0$deviance,r_sq=summary(heat32_lag0)$r.sq))
-  heat32.tb1<-as.data.frame(cbind(summary(heat32_lag1)$p.table[2:3,],gcv=heat32_lag1$gcv.ubre,deviance=heat32_lag1$deviance,r_sq=summary(heat32_lag1)$r.sq))
-  heat32.tb2<-as.data.frame(cbind(summary(heat32_lag2)$p.table[2:3,],gcv=heat32_lag2$gcv.ubre,deviance=heat32_lag2$deviance,r_sq=summary(heat32_lag2)$r.sq))
-  heat32.tb3<-as.data.frame(cbind(summary(heat32_lag3)$p.table[2:3,],gcv=heat32_lag3$gcv.ubre,deviance=heat32_lag3$deviance,r_sq=summary(heat32_lag3)$r.sq))
-  heat32.tb4<-as.data.frame(cbind(summary(heat32_lag4)$p.table[2:3,],gcv=heat32_lag4$gcv.ubre,deviance=heat32_lag4$deviance,r_sq=summary(heat32_lag4)$r.sq))
-  heat32.tb5<-as.data.frame(cbind(summary(heat32_lag5)$p.table[2:3,],gcv=heat32_lag5$gcv.ubre,deviance=heat32_lag5$deviance,r_sq=summary(heat32_lag5)$r.sq))
-  heat32.tb6<-as.data.frame(cbind(summary(heat32_lag6)$p.table[2:3,],gcv=heat32_lag6$gcv.ubre,deviance=heat32_lag6$deviance,r_sq=summary(heat32_lag6)$r.sq))
-  heat32.tb7<-as.data.frame(cbind(summary(heat32_lag7)$p.table[2:3,],gcv=heat32_lag7$gcv.ubre,deviance=heat32_lag7$deviance,r_sq=summary(heat32_lag7)$r.sq))
-  
-  heat33.tb0<-as.data.frame(cbind(summary(heat33_lag0)$p.table[2:3,],gcv=heat33_lag0$gcv.ubre,deviance=heat33_lag0$deviance,r_sq=summary(heat33_lag0)$r.sq))
-  heat33.tb1<-as.data.frame(cbind(summary(heat33_lag1)$p.table[2:3,],gcv=heat33_lag1$gcv.ubre,deviance=heat33_lag1$deviance,r_sq=summary(heat33_lag1)$r.sq))
-  heat33.tb2<-as.data.frame(cbind(summary(heat33_lag2)$p.table[2:3,],gcv=heat33_lag2$gcv.ubre,deviance=heat33_lag2$deviance,r_sq=summary(heat33_lag2)$r.sq))
-  heat33.tb3<-as.data.frame(cbind(summary(heat33_lag3)$p.table[2:3,],gcv=heat33_lag3$gcv.ubre,deviance=heat33_lag3$deviance,r_sq=summary(heat33_lag3)$r.sq))
-  heat33.tb4<-as.data.frame(cbind(summary(heat33_lag4)$p.table[2:3,],gcv=heat33_lag4$gcv.ubre,deviance=heat33_lag4$deviance,r_sq=summary(heat33_lag4)$r.sq))
-  heat33.tb5<-as.data.frame(cbind(summary(heat33_lag5)$p.table[2:3,],gcv=heat33_lag5$gcv.ubre,deviance=heat33_lag5$deviance,r_sq=summary(heat33_lag5)$r.sq))
-  heat33.tb6<-as.data.frame(cbind(summary(heat33_lag6)$p.table[2:3,],gcv=heat33_lag6$gcv.ubre,deviance=heat33_lag6$deviance,r_sq=summary(heat33_lag6)$r.sq))
-  heat33.tb7<-as.data.frame(cbind(summary(heat33_lag7)$p.table[2:3,],gcv=heat33_lag7$gcv.ubre,deviance=heat33_lag7$deviance,r_sq=summary(heat33_lag7)$r.sq))
-  
-  fit.tb0$label=row.names(fit.tb0);fit.tb1$label=row.names(fit.tb1)
-  fit.tb2$label=row.names(fit.tb2);fit.tb3$label=row.names(fit.tb3)
-  fit.tb4$label=row.names(fit.tb4);fit.tb5$label=row.names(fit.tb5)
-  fit.tb6$label=row.names(fit.tb6);fit.tb7$label=row.names(fit.tb7)
-  
-  fit.tb01$label=row.names(fit.tb01);fit.tb02$label=row.names(fit.tb02)
-  fit.tb03$label=row.names(fit.tb03);fit.tb04$label=row.names(fit.tb04)
-  fit.tb05$label=row.names(fit.tb05);fit.tb06$label=row.names(fit.tb06)
-  fit.tb07$label=row.names(fit.tb07)
-  
-  heat28.tb0$label=row.names(heat28.tb0);heat28.tb1$label=row.names(heat28.tb1)
-  heat28.tb2$label=row.names(heat28.tb2);heat28.tb3$label=row.names(heat28.tb3)
-  heat28.tb4$label=row.names(heat28.tb4);heat28.tb5$label=row.names(heat28.tb5)
-  heat28.tb6$label=row.names(heat28.tb6);heat28.tb7$label=row.names(heat28.tb7)
-  
-  heat29.tb0$label=row.names(heat29.tb0);heat29.tb1$label=row.names(heat29.tb1)
-  heat29.tb2$label=row.names(heat29.tb2);heat29.tb3$label=row.names(heat29.tb3)
-  heat29.tb4$label=row.names(heat29.tb4);heat29.tb5$label=row.names(heat29.tb5)
-  heat29.tb6$label=row.names(heat29.tb6);heat29.tb7$label=row.names(heat29.tb7)
-  
-  heat30.tb0$label=row.names(heat30.tb0);heat30.tb1$label=row.names(heat30.tb1)
-  heat30.tb2$label=row.names(heat30.tb2);heat30.tb3$label=row.names(heat30.tb3)
-  heat30.tb4$label=row.names(heat30.tb4);heat30.tb5$label=row.names(heat30.tb5)
-  heat30.tb6$label=row.names(heat30.tb6);heat30.tb7$label=row.names(heat30.tb7)
-  
-  heat31.tb0$label=row.names(heat31.tb0);heat31.tb1$label=row.names(heat31.tb1)
-  heat31.tb2$label=row.names(heat31.tb2);heat31.tb3$label=row.names(heat31.tb3)
-  heat31.tb4$label=row.names(heat31.tb4);heat31.tb5$label=row.names(heat31.tb5)
-  heat31.tb6$label=row.names(heat31.tb6);heat31.tb7$label=row.names(heat31.tb7)
-  
-  heat32.tb0$label=row.names(heat32.tb0);heat32.tb1$label=row.names(heat32.tb1)
-  heat32.tb2$label=row.names(heat32.tb2);heat32.tb3$label=row.names(heat32.tb3)
-  heat32.tb4$label=row.names(heat32.tb4);heat32.tb5$label=row.names(heat32.tb5)
-  heat32.tb6$label=row.names(heat32.tb6);heat32.tb7$label=row.names(heat32.tb7)
-  
-  heat33.tb0$label=row.names(heat33.tb0);heat33.tb1$label=row.names(heat33.tb1)
-  heat33.tb2$label=row.names(heat33.tb2);heat33.tb3$label=row.names(heat33.tb3)
-  heat33.tb4$label=row.names(heat33.tb4);heat33.tb5$label=row.names(heat33.tb5)
-  heat33.tb6$label=row.names(heat33.tb6);heat33.tb7$label=row.names(heat33.tb7)
-  
-  
-  fit.tb.single<-rbind(fit.tb0,fit.tb1,fit.tb2,fit.tb3,fit.tb4,fit.tb5,fit.tb6,fit.tb7)
-  fit.tb.moving<-rbind(fit.tb01,fit.tb02,fit.tb03,fit.tb04,fit.tb05,fit.tb06,fit.tb07)
-  
-  heat28.tb.single<-rbind(heat28.tb0,heat28.tb1,heat28.tb2,heat28.tb3,heat28.tb4,heat28.tb5,heat28.tb6,heat28.tb7)
-  heat29.tb.single<-rbind(heat29.tb0,heat29.tb1,heat29.tb2,heat29.tb3,heat29.tb4,heat29.tb5,heat29.tb6,heat29.tb7)
-  heat30.tb.single<-rbind(heat30.tb0,heat30.tb1,heat30.tb2,heat30.tb3,heat30.tb4,heat30.tb5,heat30.tb6,heat30.tb7)
-  heat31.tb.single<-rbind(heat31.tb0,heat31.tb1,heat31.tb2,heat31.tb3,heat31.tb4,heat31.tb5,heat31.tb6,heat31.tb7)
-  heat32.tb.single<-rbind(heat32.tb0,heat32.tb1,heat32.tb2,heat32.tb3,heat32.tb4,heat32.tb5,heat32.tb6,heat32.tb7)
-  heat33.tb.single<-rbind(heat33.tb0,heat33.tb1,heat33.tb2,heat33.tb3,heat33.tb4,heat33.tb5,heat33.tb6,heat33.tb7)
-  
-  fit.tb.single$gubun="single"
-  fit.tb.moving$gubun="moving"
-  
-  heat28.tb.single$gubun="single"
-  heat29.tb.single$gubun="single"
-  heat30.tb.single$gubun="single"
-  heat31.tb.single$gubun="single"
-  heat32.tb.single$gubun="single"
-  heat33.tb.single$gubun="single"
-  
-  fit.tb.single$lag=paste0("lag",1:8-1)
-  fit.tb.moving$lag=paste0("lag0",1:7)
-  
-  heat28.tb.single$lag=paste0("lag",1:8-1)
-  heat29.tb.single$lag=paste0("lag",1:8-1)
-  heat30.tb.single$lag=paste0("lag",1:8-1)
-  heat31.tb.single$lag=paste0("lag",1:8-1)
-  heat32.tb.single$lag=paste0("lag",1:8-1)
-  heat33.tb.single$lag=paste0("lag",1:8-1)
-  
-  fit.tb.single$exposure=c("maxT","pm25")
-  fit.tb.moving$exposure=c("maxT","pm25")
-  heat28.tb.single$exposure=c("heat28","pm25")
-  heat29.tb.single$exposure=c("heat29","pm25")
-  heat30.tb.single$exposure=c("heat30","pm25")
-  heat31.tb.single$exposure=c("heat31","pm25")
-  heat32.tb.single$exposure=c("heat32","pm25")
-  heat33.tb.single$exposure=c("heat33","pm25")
-  
-  res<-rbind(fit.tb.single,fit.tb.moving,heat28.tb.single,heat29.tb.single,
-             heat30.tb.single,heat31.tb.single,heat32.tb.single,heat33.tb.single)
-  
-  res$sido=SIDO;res}
-
-#¿Â¿­ÁúÈ¯°ü·Ã 
-tt01_sido01<-sido.gam(tt01,"¼­¿ï");tt01_sido02<-sido.gam(tt01,"ºÎ»ê")
-tt01_sido03<-sido.gam(tt01,"´ë±¸");tt01_sido04<-sido.gam(tt01,"ÀÎÃµ")
-tt01_sido05<-sido.gam(tt01,"±¤ÁÖ");tt01_sido06<-sido.gam(tt01,"´ëÀü")
-tt01_sido07<-sido.gam(tt01,"¿ï»ê");tt01_sido08<-sido.gam(tt01,"°æ±â")
-tt01_sido09<-sido.gam(tt01,"°­¿ø");tt01_sido10<-sido.gam(tt01,"ÃæºÏ")
-tt01_sido11<-sido.gam(tt01,"Ãæ³²");tt01_sido12<-sido.gam(tt01,"ÀüºÏ")
-tt01_sido13<-sido.gam(tt01,"Àü³²");tt01_sido14<-sido.gam(tt01,"°æºÏ")
-tt01_sido15<-sido.gam(tt01,"°æ³²")
-
-tt01.sido.tb<-rbind(tt01_sido01,tt01_sido02,tt01_sido03,tt01_sido04,tt01_sido05,tt01_sido06,tt01_sido07,tt01_sido08,
-                    tt01_sido09,tt01_sido10,tt01_sido11,tt01_sido12,tt01_sido13,tt01_sido14,tt01_sido15)
-
-#¿­¼º°æ·Ã
-tt03_sido01<-sido.gam(tt03,"¼­¿ï");tt03_sido02<-sido.gam(tt03,"ºÎ»ê")
-tt03_sido03<-sido.gam(tt03,"´ë±¸");tt03_sido04<-sido.gam(tt03,"ÀÎÃµ")
-tt03_sido05<-sido.gam(tt03,"±¤ÁÖ");tt03_sido06<-sido.gam(tt03,"´ëÀü")
-tt03_sido07<-sido.gam(tt03,"¿ï»ê");tt03_sido08<-sido.gam(tt03,"°æ±â")
-tt03_sido09<-sido.gam(tt03,"°­¿ø");tt03_sido10<-sido.gam(tt03,"ÃæºÏ")
-tt03_sido11<-sido.gam(tt03,"Ãæ³²");tt03_sido12<-sido.gam(tt03,"ÀüºÏ")
-tt03_sido13<-sido.gam(tt03,"Àü³²");tt03_sido14<-sido.gam(tt03,"°æºÏ")
-tt03_sido15<-sido.gam(tt03,"°æ³²")
-
-tt03.sido.tb<-rbind(tt03_sido01,tt03_sido02,tt03_sido03,tt03_sido04,tt03_sido05,tt03_sido06,tt03_sido07,tt03_sido08,
-                    tt03_sido09,tt03_sido10,tt03_sido11,tt03_sido12,tt03_sido13,tt03_sido14,tt03_sido15)
-
-#¼öÁ·±¸º´
-tt04_sido01<-sido.gam(tt04,"¼­¿ï");tt04_sido02<-sido.gam(tt04,"ºÎ»ê")
-tt04_sido03<-sido.gam(tt04,"´ë±¸");tt04_sido04<-sido.gam(tt04,"ÀÎÃµ")
-tt04_sido05<-sido.gam(tt04,"±¤ÁÖ");tt04_sido06<-sido.gam(tt04,"´ëÀü")
-tt04_sido07<-sido.gam(tt04,"¿ï»ê");tt04_sido08<-sido.gam(tt04,"°æ±â")
-tt04_sido09<-sido.gam(tt04,"°­¿ø");tt04_sido10<-sido.gam(tt04,"ÃæºÏ")
-tt04_sido11<-sido.gam(tt04,"Ãæ³²");tt04_sido12<-sido.gam(tt04,"ÀüºÏ")
-tt04_sido13<-sido.gam(tt04,"Àü³²");tt04_sido14<-sido.gam(tt04,"°æºÏ")
-tt04_sido15<-sido.gam(tt04,"°æ³²")
-
-tt04.sido.tb<-rbind(tt04_sido01,tt04_sido02,tt04_sido03,tt04_sido04,tt04_sido05,tt04_sido06,tt04_sido07,tt04_sido08,
-                    tt04_sido09,tt04_sido10,tt04_sido11,tt04_sido12,tt04_sido13,tt04_sido14,tt04_sido15)
-
-# write.csv(tt01.sido.tb,file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\¿Â¿­ÁúÈ¯_½Ãµµº°_TS°á°ú.csv",row.names=F,na="")
-# write.csv(tt03.sido.tb,file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\¿­¼º°æ·Ã_½Ãµµº°_TS°á°ú.csv",row.names=F,na="")
-# write.csv(tt04.sido.tb,file="D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\¼öÁ·±¸º´_½Ãµµº°_TS°á°ú.csv",row.names=F,na="")
-#--------------------------------------------------------------------------#
-#--------------------------------------------------------------------------#
-#Second stage, ¸ŞÅ¸ºĞ¼®
-
-tt01.sido.tb<-read.csv("D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\¿Â¿­ÁúÈ¯_½Ãµµº°_TS°á°ú.csv")
-tt03.sido.tb<-read.csv("D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\¿­¼º°æ·Ã_½Ãµµº°_TS°á°ú.csv")
-tt04.sido.tb<-read.csv("D:\\EUMC\\Áúº´°ü¸®Ã»\\Æø¿°¿¬±¸\\°ø´ÜÀÚ·á\\¼öÁ·±¸º´_½Ãµµº°_TS°á°ú.csv")
-
-tt01.sido.tb$SE=tt01.sido.tb$Std..Error
-tt03.sido.tb$SE=tt03.sido.tb$Std..Error
-tt04.sido.tb$SE=tt04.sido.tb$Std..Error
-
-#µµ½Ãº° °á°ú Áúº´Áöµµ ±×¸² ±×¸®±â
-tt01.sido.tb  %>% filter(label=="maxtemp_lag0")
-tt01.sido.tb  %>% filter(label=="maxtemp_lag1")
-tt01.sido.tb  %>% filter(label=="maxtemp_lag2")
-tt01.sido.tb  %>% filter(label=="maxtemp_lag3")
-tt01.sido.tb  %>% filter(label=="maxtemp_lag4")
-tt01.sido.tb  %>% filter(label=="maxtemp_lag5")
-tt01.sido.tb  %>% filter(label=="maxtemp_lag6")
-tt01.sido.tb  %>% filter(label=="maxtemp_lag7")
-
-
-meta_func<-function(dataset){
-  uni0 <- with(dataset %>% filter(label=="maxtemp_lag0"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni1 <- with(dataset %>% filter(label=="maxtemp_lag1"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni2 <- with(dataset %>% filter(label=="maxtemp_lag2"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni3 <- with(dataset %>% filter(label=="maxtemp_lag3"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni4 <- with(dataset %>% filter(label=="maxtemp_lag4"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni5 <- with(dataset %>% filter(label=="maxtemp_lag5"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni6 <- with(dataset %>% filter(label=="maxtemp_lag6"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni7 <- with(dataset %>% filter(label=="maxtemp_lag7"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  
-  single.uni<-as.data.frame(rbind(with(uni0,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni1,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni2,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni3,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni4,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni5,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni6,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni7,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2))))
-  
-  single.uni$lag=paste0("lag",1:8-1)
-  single.uni$exposure="maxT"
-  
-  uni01 <- with(dataset %>% filter(label=="maxtemp_lag01"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni02 <- with(dataset %>% filter(label=="maxtemp_lag02"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni03 <- with(dataset %>% filter(label=="maxtemp_lag03"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni04 <- with(dataset %>% filter(label=="maxtemp_lag04"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni05 <- with(dataset %>% filter(label=="maxtemp_lag05"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni06 <- with(dataset %>% filter(label=="maxtemp_lag06"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  uni07 <- with(dataset %>% filter(label=="maxtemp_lag07"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  
-  moving.uni<-as.data.frame(rbind(with(uni01,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni02,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni03,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni04,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni05,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni06,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                  with(uni07,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2))))
-  
-  moving.uni$lag=paste0("lag0",1:7)
-  moving.uni$exposure="maxT"
-  
-  heat28_0 <- with(dataset %>% filter(label=="heat28_lag0"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat28_1 <- with(dataset %>% filter(label=="heat28_lag1"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat28_2 <- with(dataset %>% filter(label=="heat28_lag2"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat28_3 <- with(dataset %>% filter(label=="heat28_lag3"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat28_4 <- with(dataset %>% filter(label=="heat28_lag4"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat28_5 <- with(dataset %>% filter(label=="heat28_lag5"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat28_6 <- with(dataset %>% filter(label=="heat28_lag6"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat28_7 <- with(dataset %>% filter(label=="heat28_lag7"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  
-  single.heat28<-as.data.frame(rbind(with(heat28_0,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat28_1,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat28_2,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat28_3,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat28_4,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat28_5,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat28_6,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat28_7,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2))))
-  
-  single.heat28$lag=paste0("lag",1:8-1)
-  single.heat28$exposure="heat28"
-  
-  heat29_0 <- with(dataset %>% filter(label=="heat29_lag0"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat29_1 <- with(dataset %>% filter(label=="heat29_lag1"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat29_2 <- with(dataset %>% filter(label=="heat29_lag2"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat29_3 <- with(dataset %>% filter(label=="heat29_lag3"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat29_4 <- with(dataset %>% filter(label=="heat29_lag4"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat29_5 <- with(dataset %>% filter(label=="heat29_lag5"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat29_6 <- with(dataset %>% filter(label=="heat29_lag6"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat29_7 <- with(dataset %>% filter(label=="heat29_lag7"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  
-  single.heat29<-as.data.frame(rbind(with(heat29_0,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat29_1,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat29_2,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat29_3,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat29_4,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat29_5,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat29_6,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat29_7,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2))))
-  
-  single.heat29$lag=paste0("lag",1:8-1)
-  single.heat29$exposure="heat29"
-  
-  heat30_0 <- with(dataset %>% filter(label=="heat30_lag0"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat30_1 <- with(dataset %>% filter(label=="heat30_lag1"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat30_2 <- with(dataset %>% filter(label=="heat30_lag2"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat30_3 <- with(dataset %>% filter(label=="heat30_lag3"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat30_4 <- with(dataset %>% filter(label=="heat30_lag4"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat30_5 <- with(dataset %>% filter(label=="heat30_lag5"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat30_6 <- with(dataset %>% filter(label=="heat30_lag6"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat30_7 <- with(dataset %>% filter(label=="heat30_lag7"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  
-  single.heat30<-as.data.frame(rbind(with(heat30_0,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat30_1,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat30_2,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat30_3,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat30_4,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat30_5,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat30_6,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat30_7,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2))))
-  
-  single.heat30$lag=paste0("lag",1:8-1)
-  single.heat30$exposure="heat30"
-  
-  heat31_0 <- with(dataset %>% filter(label=="heat31_lag0"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat31_1 <- with(dataset %>% filter(label=="heat31_lag1"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat31_2 <- with(dataset %>% filter(label=="heat31_lag2"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat31_3 <- with(dataset %>% filter(label=="heat31_lag3"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat31_4 <- with(dataset %>% filter(label=="heat31_lag4"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat31_5 <- with(dataset %>% filter(label=="heat31_lag5"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat31_6 <- with(dataset %>% filter(label=="heat31_lag6"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat31_7 <- with(dataset %>% filter(label=="heat31_lag7"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  
-  single.heat31<-as.data.frame(rbind(with(heat31_0,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat31_1,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat31_2,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat31_3,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat31_4,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat31_5,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat31_6,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat31_7,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2))))
-  
-  single.heat31$lag=paste0("lag",1:8-1)
-  single.heat31$exposure="heat31"
-  
-  heat32_0 <- with(dataset %>% filter(label=="heat32_lag0"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat32_1 <- with(dataset %>% filter(label=="heat32_lag1"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat32_2 <- with(dataset %>% filter(label=="heat32_lag2"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat32_3 <- with(dataset %>% filter(label=="heat32_lag3"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat32_4 <- with(dataset %>% filter(label=="heat32_lag4"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat32_5 <- with(dataset %>% filter(label=="heat32_lag5"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat32_6 <- with(dataset %>% filter(label=="heat32_lag6"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat32_7 <- with(dataset %>% filter(label=="heat32_lag7"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  
-  single.heat32<-as.data.frame(rbind(with(heat32_0,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat32_1,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat32_2,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat32_3,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat32_4,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat32_5,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat32_6,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat32_7,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2))))
-  
-  single.heat32$lag=paste0("lag",1:8-1)
-  single.heat32$exposure="heat32"
-  
-  heat33_0 <- with(dataset %>% filter(label=="heat33_lag0"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat33_1 <- with(dataset %>% filter(label=="heat33_lag1"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat33_2 <- with(dataset %>% filter(label=="heat33_lag2"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat33_3 <- with(dataset %>% filter(label=="heat33_lag3"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat33_4 <- with(dataset %>% filter(label=="heat33_lag4"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat33_5 <- with(dataset %>% filter(label=="heat33_lag5"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat33_6 <- with(dataset %>% filter(label=="heat33_lag6"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  heat33_7 <- with(dataset %>% filter(label=="heat33_lag7"),rma(yi=Estimate, sei=SE, slab=sido, measure="RR",digits=5,method="REML"))
-  
-  single.heat33<-as.data.frame(rbind(with(heat33_0,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat33_1,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat33_2,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat33_3,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat33_4,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat33_5,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat33_6,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2)),
-                                     with(heat33_7,data.frame(beta,se,zval,pval,ci.lb,ci.ub,I2,H2))))
-  
-  single.heat33$lag=paste0("lag",1:8-1)
-  single.heat33$exposure="heat33"
-  
-  rbind(single.uni,moving.uni,
-        single.heat28,single.heat29,
-        single.heat30,single.heat31,
-        single.heat32,single.heat33)
+  res$lag  =paste0("lag0",1:7)
+  res$gubun="MA"
+  res$exposure=exposure
+  res$city    =unique(datalist[[i]]$KOR_SIDO)
+  names(res)[2:4]=c("SE","t","Pval")
+  res
 }
 
-meta1<-meta_func(tt01.sido.tb) #¿Â¿­ÁúÈ¯
-meta3<-meta_func(tt03.sido.tb) #¿­¼º°æ·Ã
-meta4<-meta_func(tt04.sido.tb) #¼öÁ·±¸º´
+maxT_s.list =NULL;maxT_m.list =NULL
+maxAT_s.list=NULL;maxAT_m.list=NULL
+HI_c.list   =NULL;TN.list     =NULL
+DT_s.list   =NULL;DT_m.list   =NULL
+TSD_s.list  =NULL;TSD_m.list  =NULL
 
-# write.csv(meta1,file="meta_reulst_heatrelated.csv",row.names=F,na="")
-# write.csv(meta3,file="meta_reulst_feb.csv",row.names=F,na="")
-# write.csv(meta4,file="meta_reulst_HFMD.csv",row.names=F,na="")
+hwD2_maxT.list=NULL ;hwD3_maxT.list=NULL
+hwD2_maxAT.list=NULL;hwD3_maxAT.list=NULL
 
-meta1.r<-subset(meta1,exposure=="maxT")
-meta1.r$category=c(rep("Single lag",8),rep("Moving average",7))
+hwD2_maxT_p70.list=NULL;hwD2_maxT_p75.list=NULL;hwD2_maxT_p80.list=NULL;hwD2_maxT_p85.list=NULL;hwD2_maxT_p90.list=NULL;hwD2_maxT_p91.list=NULL
+hwD2_maxT_p92.list=NULL;hwD2_maxT_p93.list=NULL;hwD2_maxT_p94.list=NULL;hwD2_maxT_p95.list=NULL
 
-meta1.r$RR =exp(meta1.r$beta)
-meta1.r$lci=exp(meta1.r$beta-1.96*meta1.r$se)
-meta1.r$uci=exp(meta1.r$beta+1.96*meta1.r$se)
+hwD2_maxAT_p70.list=NULL;hwD2_maxAT_p75.list=NULL;hwD2_maxAT_p80.list=NULL;hwD2_maxAT_p85.list=NULL;hwD2_maxAT_p90.list=NULL;hwD2_maxAT_p91.list=NULL
+hwD2_maxAT_p92.list=NULL;hwD2_maxAT_p93.list=NULL;hwD2_maxAT_p94.list=NULL;hwD2_maxAT_p95.list=NULL
 
-meta1.1<-subset(meta1.r,category=="Single lag")
-meta1.2<-subset(meta1.r,category=="Moving average")
+hwD3_maxT_p70.list=NULL;hwD3_maxT_p75.list=NULL;hwD3_maxT_p80.list=NULL;hwD3_maxT_p85.list=NULL;hwD3_maxT_p90.list=NULL;hwD3_maxT_p91.list=NULL
+hwD3_maxT_p92.list=NULL;hwD3_maxT_p93.list=NULL;hwD3_maxT_p94.list=NULL;hwD3_maxT_p95.list=NULL
 
-gs1<-ggplot(meta1.1,aes(lag,RR))+geom_point(size=6)+theme_bw(base_size=25)+
-  geom_errorbar(aes(ymin=lci,ymax=uci),width=0.2,lwd=1.1)+facet_wrap(~category)+labs(x="",y="Relative Risk (95% CI)")+
-  geom_hline(yintercept=1,col="red")+coord_cartesian(ylim=c(0.99,1.04))
-gm1<-ggplot(meta1.2,aes(lag,RR))+geom_point(size=6)+theme_bw(base_size=25)+
-  geom_errorbar(aes(ymin=lci,ymax=uci),width=0.2,lwd=1.1)+facet_wrap(~category)+labs(x="",y="")+
-  geom_hline(yintercept=1,col="red")+coord_cartesian(ylim=c(0.99,1.04))
-
-x11();grid.arrange(gs1,gm1,ncol=2)
+hwD3_maxAT_p70.list=NULL;hwD3_maxAT_p75.list=NULL;hwD3_maxAT_p80.list=NULL;hwD3_maxAT_p85.list=NULL;hwD3_maxAT_p90.list=NULL;hwD3_maxAT_p91.list=NULL
+hwD3_maxAT_p92.list=NULL;hwD3_maxAT_p93.list=NULL;hwD3_maxAT_p94.list=NULL;hwD3_maxAT_p95.list=NULL
 
 
-meta3.r<-subset(meta3,exposure=="maxT")
-meta3.r$category=c(rep("Single lag",8),rep("Moving average",7))
+#ë„ì‹œë³„ ëª¨ë¸ë§ 
+for(i in 1:17){
+  #ì¼ìµœê³ ê¸°ì˜¨
+  maxT_s.list[[i]] <-mod_s(datalist[[i]],"maxT_s")
+  maxT_m.list[[i]] <-mod_m(datalist[[i]],"maxT_m")
+  
+  #ì¼ìµœê³ ì²´ê°ê¸°ì˜¨
+  maxAT_s.list[[i]]<-mod_s(datalist[[i]],"maxAT_s")
+  maxAT_m.list[[i]]<-mod_m(datalist[[i]],"maxAT_m")
+  
+  #ì—´ì§€ìˆ˜
+  HI_c.list[[i]]   <-mod_s(datalist[[i]],"HI_c_s")
+  
+  #ì—´ëŒ€ì•¼
+  TN.list[[i]]     <-mod_s(datalist[[i]],"TN_s")
+  
+  #ì¼êµì°¨
+  
+  DT_s.list[[i]]   <-mod_s(datalist[[i]],"DT_s")
+  DT_m.list[[i]]   <-mod_m(datalist[[i]],"DT_m")
+  
+  #ì¼ì¼ ê¸°ì˜¨í¸ì°¨
+  TSD_s.list[[i]]  <-mod_s(datalist[[i]],"temp_SD_s")
+  TSD_m.list[[i]]  <-mod_m(datalist[[i]],"temp_SD_m")
+  
+  #í­ì—¼: ì ˆëŒ€ì˜¨ë„(33ë„), ì¼ìµœê³ ê¸°ì˜¨ 
+  hwD2_maxT.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxT_s")
+  hwD3_maxT.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxT_s")
+  
+  #í­ì—¼: ì ˆëŒ€ì˜¨ë„(33ë„), ì¼ìµœê³ ì²´ê°ê¸°ì˜¨ 
+  hwD2_maxAT.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxAT_s")
+  hwD3_maxAT.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxAT_s")
+  
+  #í­ì—¼: ìƒëŒ€ì˜¨ë„(ë¶„ìœ„ìˆ˜), ì¼ìµœê³ ê¸°ì˜¨ 2ì¼
+  hwD2_maxT_p70.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxT_p70_s");hwD2_maxT_p75.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxT_p75_s")
+  hwD2_maxT_p80.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxT_p80_s");hwD2_maxT_p85.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxT_p85_s")
+  hwD2_maxT_p90.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxT_p90_s");hwD2_maxT_p91.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxT_p91_s")
+  hwD2_maxT_p92.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxT_p92_s");hwD2_maxT_p93.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxT_p93_s")
+  hwD2_maxT_p94.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxT_p94_s");hwD2_maxT_p95.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxT_p95_s")
+  
+  #í­ì—¼: ìƒëŒ€ì˜¨ë„(ë¶„ìœ„ìˆ˜), ì¼ìµœê³ ê¸°ì˜¨ 3ì¼
+  hwD3_maxT_p70.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxT_p70_s");hwD3_maxT_p75.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxT_p75_s")
+  hwD3_maxT_p80.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxT_p80_s");hwD3_maxT_p85.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxT_p85_s")
+  hwD3_maxT_p90.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxT_p90_s");hwD3_maxT_p91.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxT_p91_s")
+  hwD3_maxT_p92.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxT_p92_s");hwD3_maxT_p93.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxT_p93_s")
+  hwD3_maxT_p94.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxT_p94_s");hwD3_maxT_p95.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxT_p95_s")
+  
+  #í­ì—¼: ìƒëŒ€ì˜¨ë„(ë¶„ìœ„ìˆ˜), ì¼ìµœê³ ì²´ê°ê¸°ì˜¨ 2ì¼
+  hwD2_maxAT_p70.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxAT_p70_s");hwD2_maxAT_p75.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxAT_p75_s")
+  hwD2_maxAT_p80.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxAT_p80_s");hwD2_maxAT_p85.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxAT_p85_s")
+  hwD2_maxAT_p90.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxAT_p90_s");hwD2_maxAT_p91.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxAT_p91_s")
+  hwD2_maxAT_p92.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxAT_p92_s");hwD2_maxAT_p93.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxAT_p93_s")
+  hwD2_maxAT_p94.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxAT_p94_s");hwD2_maxAT_p95.list[[i]]<-mod_s(datalist[[i]],"hwD2_maxAT_p95_s")
+  
+  #í­ì—¼: ìƒëŒ€ì˜¨ë„(ë¶„ìœ„ìˆ˜), ì¼ìµœê³ ì²´ê°ê¸°ì˜¨ 3ì¼
+  hwD3_maxAT_p70.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxAT_p70_s");hwD3_maxAT_p75.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxAT_p75_s")
+  hwD3_maxAT_p80.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxAT_p80_s");hwD3_maxAT_p85.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxAT_p85_s")
+  hwD3_maxAT_p90.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxAT_p90_s");hwD3_maxAT_p91.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxAT_p91_s")
+  hwD3_maxAT_p92.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxAT_p92_s");hwD3_maxAT_p93.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxAT_p93_s")
+  hwD3_maxAT_p94.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxAT_p94_s");hwD3_maxAT_p95.list[[i]]<-mod_s(datalist[[i]],"hwD3_maxAT_p95_s")
+  
+  print(i)
+}
 
-meta3.r$RR =exp(meta3.r$beta)
-meta3.r$lci=exp(meta3.r$beta-1.96*meta3.r$se)
-meta3.r$uci=exp(meta3.r$beta+1.96*meta3.r$se)
+maxT_s.res <-do.call(rbind,maxT_s.list) ;maxT_m.res <-do.call(rbind,maxT_m.list)
+maxAT_s.res<-do.call(rbind,maxAT_s.list);maxAT_m.res<-do.call(rbind,maxAT_m.list)
 
-meta3.1<-subset(meta3.r,category=="Single lag")
-meta3.2<-subset(meta3.r,category=="Moving average")
+HI_c.res<-do.call(rbind,HI_c.list)
+TN.res  <-do.call(rbind,TN.list)
 
-gs3<-ggplot(meta3.1,aes(lag,RR))+geom_point(size=6)+theme_bw(base_size=25)+
-  geom_errorbar(aes(ymin=lci,ymax=uci),width=0.2,lwd=1.1)+facet_wrap(~category)+labs(x="",y="Relative Risk (95% CI)")+
-  geom_hline(yintercept=1,col="red")+coord_cartesian(ylim=c(0.97,1.02))
-gm3<-ggplot(meta3.2,aes(lag,RR))+geom_point(size=6)+theme_bw(base_size=25)+
-  geom_errorbar(aes(ymin=lci,ymax=uci),width=0.2,lwd=1.1)+facet_wrap(~category)+labs(x="",y="")+
-  geom_hline(yintercept=1,col="red")+coord_cartesian(ylim=c(0.97,1.02))
+DT_s.res<-do.call(rbind,DT_s.list)  ;DT_m.res<-do.call(rbind,DT_m.list)
+TSD_s.res<-do.call(rbind,TSD_s.list);TSD_m.res<-do.call(rbind,TSD_m.list)
 
-x11();grid.arrange(gs3,gm3,ncol=2)
+hwD2_maxT.res <-do.call(rbind,hwD2_maxT.list) ;hwD3_maxT.res<-do.call(rbind,hwD3_maxT.list)
+hwD2_maxAT.res<-do.call(rbind,hwD2_maxAT.list);hwD3_maxAT.res<-do.call(rbind,hwD3_maxAT.list)
 
-meta4.r<-subset(meta4,exposure=="maxT")
-meta4.r$category=c(rep("Single lag",8),rep("Moving average",7))
+hwD2_maxT_p70.res<-do.call(rbind,hwD2_maxT_p70.list);hwD2_maxT_p75.res<-do.call(rbind,hwD2_maxT_p75.list)
+hwD2_maxT_p80.res<-do.call(rbind,hwD2_maxT_p80.list);hwD2_maxT_p85.res<-do.call(rbind,hwD2_maxT_p85.list)
+hwD2_maxT_p90.res<-do.call(rbind,hwD2_maxT_p90.list);hwD2_maxT_p91.res<-do.call(rbind,hwD2_maxT_p91.list)
+hwD2_maxT_p92.res<-do.call(rbind,hwD2_maxT_p92.list);hwD2_maxT_p93.res<-do.call(rbind,hwD2_maxT_p93.list)
+hwD2_maxT_p94.res<-do.call(rbind,hwD2_maxT_p94.list);hwD2_maxT_p95.res<-do.call(rbind,hwD2_maxT_p95.list)
 
-meta4.r$RR =exp(meta4.r$beta)
-meta4.r$lci=exp(meta4.r$beta-1.96*meta4.r$se)
-meta4.r$uci=exp(meta4.r$beta+1.96*meta4.r$se)
-
-meta4.1<-subset(meta4.r,category=="Single lag")
-meta4.2<-subset(meta4.r,category=="Moving average")
-
-gs4<-ggplot(meta4.1,aes(lag,RR))+geom_point(size=6)+theme_bw(base_size=25)+
-  geom_errorbar(aes(ymin=lci,ymax=uci),width=0.2,lwd=1.1)+facet_wrap(~category)+labs(x="",y="Relative Risk (95% CI)")+
-  geom_hline(yintercept=1,col="red")+coord_cartesian(ylim=c(1.00,1.105))
-gm4<-ggplot(meta4.2,aes(lag,RR))+geom_point(size=6)+theme_bw(base_size=25)+
-  geom_errorbar(aes(ymin=lci,ymax=uci),width=0.2,lwd=1.1)+facet_wrap(~category)+labs(x="",y="")+
-  geom_hline(yintercept=1,col="red")+coord_cartesian(ylim=c(1.00,1.105))
-
-x11();grid.arrange(gs4,gm4,ncol=2)
+hwD3_maxT_p70.res<-do.call(rbind,hwD3_maxT_p70.list);hwD3_maxT_p75.res<-do.call(rbind,hwD3_maxT_p75.list)
+hwD3_maxT_p80.res<-do.call(rbind,hwD3_maxT_p80.list);hwD3_maxT_p85.res<-do.call(rbind,hwD3_maxT_p85.list)
+hwD3_maxT_p90.res<-do.call(rbind,hwD3_maxT_p90.list);hwD3_maxT_p91.res<-do.call(rbind,hwD3_maxT_p91.list)
+hwD3_maxT_p92.res<-do.call(rbind,hwD3_maxT_p92.list);hwD3_maxT_p93.res<-do.call(rbind,hwD3_maxT_p93.list)
+hwD3_maxT_p94.res<-do.call(rbind,hwD3_maxT_p94.list);hwD3_maxT_p95.res<-do.call(rbind,hwD3_maxT_p95.list)
 
 
+hwD2_maxAT_p70.res<-do.call(rbind,hwD2_maxAT_p70.list);hwD2_maxAT_p75.res<-do.call(rbind,hwD2_maxAT_p75.list)
+hwD2_maxAT_p80.res<-do.call(rbind,hwD2_maxAT_p80.list);hwD2_maxAT_p85.res<-do.call(rbind,hwD2_maxAT_p85.list)
+hwD2_maxAT_p90.res<-do.call(rbind,hwD2_maxAT_p90.list);hwD2_maxAT_p91.res<-do.call(rbind,hwD2_maxAT_p91.list)
+hwD2_maxAT_p92.res<-do.call(rbind,hwD2_maxAT_p92.list);hwD2_maxAT_p93.res<-do.call(rbind,hwD2_maxAT_p93.list)
+hwD2_maxAT_p94.res<-do.call(rbind,hwD2_maxAT_p94.list);hwD2_maxAT_p95.res<-do.call(rbind,hwD2_maxAT_p95.list)
 
+hwD3_maxAT_p70.res<-do.call(rbind,hwD3_maxAT_p70.list);hwD3_maxAT_p75.res<-do.call(rbind,hwD3_maxAT_p75.list)
+hwD3_maxAT_p80.res<-do.call(rbind,hwD3_maxAT_p80.list);hwD3_maxAT_p85.res<-do.call(rbind,hwD3_maxAT_p85.list)
+hwD3_maxAT_p90.res<-do.call(rbind,hwD3_maxAT_p90.list);hwD3_maxAT_p91.res<-do.call(rbind,hwD3_maxAT_p91.list)
+hwD3_maxAT_p92.res<-do.call(rbind,hwD3_maxAT_p92.list);hwD3_maxAT_p93.res<-do.call(rbind,hwD3_maxAT_p93.list)
+hwD3_maxAT_p94.res<-do.call(rbind,hwD3_maxAT_p94.list);hwD3_maxAT_p95.res<-do.call(rbind,hwD3_maxAT_p95.list)
+
+setwd("D:\\EUMC\\ì§ˆë³‘ê´€ë¦¬ì²­\\result")
+write.csv(maxT_s.res ,file="maxT_s.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(maxT_m.res ,file="maxT_m.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(maxAT_s.res,file="maxAT_s.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(maxAT_m.res,file="maxAT_m.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+write.csv(HI_c.res,file="HI_c.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(TN.res  ,file="TN.res.csv"  ,row.names=F,na="",fileEncoding = "euc-kr")
+
+write.csv(DT_s.res,file="DT_s.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(DT_m.res,file="DT_m.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+write.csv(TSD_s.res,file="TSD_s.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(TSD_m.res,file="TSD_m.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+write.csv(hwD2_maxT.res ,file="hwD2_maxT.res.csv" ,row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxT.res ,file="hwD3_maxT.res.csv" ,row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxAT.res,file="hwD2_maxAT.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxAT.res,file="hwD3_maxAT.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+write.csv(hwD2_maxT_p70.res,file="hwD2_maxT_p70.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxT_p75.res,file="hwD2_maxT_p75.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxT_p80.res,file="hwD2_maxT_p80.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxT_p85.res,file="hwD2_maxT_p85.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxT_p90.res,file="hwD2_maxT_p90.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxT_p91.res,file="hwD2_maxT_p91.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxT_p92.res,file="hwD2_maxT_p92.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxT_p93.res,file="hwD2_maxT_p93.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxT_p94.res,file="hwD2_maxT_p94.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxT_p95.res,file="hwD2_maxT_p95.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+write.csv(hwD3_maxT_p70.res,file="hwD3_maxT_p70.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxT_p75.res,file="hwD3_maxT_p75.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxT_p80.res,file="hwD3_maxT_p80.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxT_p85.res,file="hwD3_maxT_p85.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxT_p90.res,file="hwD3_maxT_p90.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxT_p91.res,file="hwD3_maxT_p91.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxT_p92.res,file="hwD3_maxT_p92.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxT_p93.res,file="hwD3_maxT_p93.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxT_p94.res,file="hwD3_maxT_p94.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxT_p95.res,file="hwD3_maxT_p95.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+write.csv(hwD2_maxAT_p70.res,file="hwD2_maxAT_p70.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxAT_p75.res,file="hwD2_maxAT_p75.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxAT_p80.res,file="hwD2_maxAT_p80.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxAT_p85.res,file="hwD2_maxAT_p85.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxAT_p90.res,file="hwD2_maxAT_p90.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxAT_p91.res,file="hwD2_maxAT_p91.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxAT_p92.res,file="hwD2_maxAT_p92.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxAT_p93.res,file="hwD2_maxAT_p93.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxAT_p94.res,file="hwD2_maxAT_p94.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD2_maxAT_p95.res,file="hwD2_maxAT_p95.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+write.csv(hwD3_maxAT_p70.res,file="hwD3_maxAT_p70.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxAT_p75.res,file="hwD3_maxAT_p75.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxAT_p80.res,file="hwD3_maxAT_p80.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxAT_p85.res,file="hwD3_maxAT_p85.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxAT_p90.res,file="hwD3_maxAT_p90.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxAT_p91.res,file="hwD3_maxAT_p91.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxAT_p92.res,file="hwD3_maxAT_p92.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxAT_p93.res,file="hwD3_maxAT_p93.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxAT_p94.res,file="hwD3_maxAT_p94.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+write.csv(hwD3_maxAT_p95.res,file="hwD3_maxAT_p95.res.csv",row.names=F,na="",fileEncoding = "euc-kr")
+
+#------------------------------------------------------------------------------------------------#
+#------------------------------------------------------------------------------------------------#
+maxT_city<-read_excel("D:\\EUMC\\ì§ˆë³‘ê´€ë¦¬ì²­\\í­ì—¼í›„ì†ì—°êµ¬\\data\\í­ì—¼ìë£Œ.xlsx",sheet="maxT_gam")
+maxT_city.r<-maxT_city %>% filter(!city %in% c("ì„¸ì¢…"))
+
+sub<-subset(maxT_city.r,lag=="lag0")
+area_index=c("Seoul","Busan","Daegu","Incheon","Gwangju","Daejeon","Ulsan","KK","KW","CB","CN","JB","JN","KB","KN","JJ")
+sub$area=area_index
+
+meta.1<-with(sub,rma(yi=Estimate, sei=SE, slab=area, measure="RR",digits=5,method="FE"))
+meta.2<-with(sub,rma(yi=Estimate, sei=SE, slab=area, measure="RR",digits=5,method="REML"))
+
+x11();forest(meta.1) #Fixed effect
+x11();forest(meta.2) #Random effect
+
+#Results table
+meta.fixed <-with(summary(meta.1),data.frame(Estimate=beta,SE=se,pval=pval,
+                                lci=ci.lb,uci=ci.ub,
+                                RR=exp(beta),RR_lci=exp(ci.lb),RR_uci=exp(ci.ub),
+                                I2    =I2,H2    =H2,tau   =sqrt(tau2),t(fit.stats[,2])))
+
+
+meta.random<-with(summary(meta.2),data.frame(Estimate=beta,SE=se,pval=pval,
+                                lci=ci.lb,uci=ci.ub,
+                                RR=exp(beta),RR_lci=exp(ci.lb),RR_uci=exp(ci.ub),
+                                I2    =I2,H2    =H2,tau   =sqrt(tau2),t(fit.stats[,2])))
+
+
+meta_df<-as.data.frame(rbind(meta.fixed,meta.random))
+meta_df$lag="lag0"
+meta_df$exposure="maxT"
+meta_df$gubun=c("Fixed","Random")
